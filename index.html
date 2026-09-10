@@ -163,6 +163,16 @@ label{display:block;color:var(--kelp);font-size:12.5px;margin-top:12px}
 .turnbanner h2{font-family:Anton,Impact,sans-serif;font-size:23px;text-transform:uppercase;letter-spacing:.01em}
 .targetlist button{display:block;width:100%;text-align:left;border:1px solid var(--ink-line);border-radius:var(--r);padding:11px 13px;margin-top:8px;font-size:14px;background:var(--ink-deep)}
 
+/* ---------- phase banner + turn order ---------- */
+.phasebar{background:#132A38;border:1px solid var(--ink-line);border-left:3px solid var(--syrup);border-radius:var(--r);
+  padding:11px 13px;margin-bottom:14px;font-size:13.5px;font-weight:700;color:var(--sand);display:flex;align-items:center;gap:9px}
+.dot2{width:7px;height:7px;border-radius:50%;background:var(--syrup);flex:none}
+@media (prefers-reduced-motion:no-preference){ .dot2{animation:p 2.4s ease-in-out infinite} }
+.orderrow{display:flex;gap:8px;overflow-x:auto;padding-bottom:2px;margin-top:8px;-webkit-overflow-scrolling:touch}
+.ochip{flex:none;background:var(--ink-deep);border:1px solid var(--ink-line);border-radius:99px;padding:7px 12px;font-size:12.5px;white-space:nowrap;color:var(--kelp)}
+.ochip.now{border-color:var(--syrup);color:var(--sand);font-weight:700}
+.ochip.done{opacity:.4;text-decoration:line-through}
+
 /* ---------- weather ---------- */
 .wxrow{display:flex;gap:10px;margin-top:10px}
 .wxday{flex:1;text-align:center;background:var(--ink-deep);border:1px solid var(--ink-line);border-radius:var(--r);padding:11px 6px}
@@ -459,6 +469,7 @@ function initSync(){
         const v = snap.val();
         if (v){ dungeon = v; dungeon.players = dungeon.players || []; dungeon.log = dungeon.log || []; }
         else { dRef.set(dungeon); }
+        dScheduleAutoResolve();
         if (view==="gaunt" && !dBusy) render();
       });
       pRef.on("value", snap => {
@@ -688,7 +699,7 @@ const MODDECK = [-2,-1,-1,0,0,0,0,0,1,1,1,2,"x2","miss"]; // drawn on every play
 
 /* ---- state ---- */
 let dungeon = loadDungeon(), dBusy = false, dSel = {a:null,b:null}, dTutStep = 0;
-function newDungeon(){ return {v:1, phase:"lobby", scenarioIndex:0, expectedCount:null, players:[], monsters:[], round:1, order:[], turnPtr:0, log:[]}; }
+function newDungeon(){ return {v:1, phase:"lobby", scenarioIndex:0, expectedCount:null, hostId:null, hostName:null, players:[], monsters:[], round:1, order:[], turnPtr:0, log:[]}; }
 const TUTORIAL = [
   {t:"Two cards a round", b:"Every round, play two cards from your hand — one for its TOP action, one for its BOTTOM action. Everything else stays in your hand for later."},
   {t:"Cards set turn order", b:"Whichever card you use for your top action, its number decides when you go that round. Lowest number goes first — same rule for the monsters. No dice for this part."},
@@ -963,16 +974,22 @@ function renderGaunt(){
   if (dungeon.phase==="defeat") return dRenderDefeat();
   return "";
 }
+function dHostPanel(){
+  const host = dungeon.hostId;
+  if (!host) return `<div class="panel"><h3>Who's running this?</h3>
+    <p>Whoever's hosting the trip should claim this — you'll control the headcount and when each scenario starts. Everyone else just plays.</p>
+    <div class="acts"><button class="btn go" id="d_claimhost">I'm running this</button></div></div>`;
+  if (host===me.id) return `<div class="panel"><h3>You're the host</h3>
+    <p>You control the headcount and when each scenario starts. Everything else — cards, moves, turns — anyone can drive.</p></div>`;
+  return `<div class="panel"><p class="note">Hosted by ${esc(dungeon.hostName||"someone")}. <button class="btn ghost" id="d_reclaimhost" style="margin-top:8px">Not them? Claim host</button></p></div>`;
+}
 function dRenderJoin(){
-  const isFirst = dungeon.players.length===0;
-  return `<div class="panel"><h3>Build your character</h3>
+  return dHostPanel() + `<div class="panel"><h3>Build your character</h3>
     <p>This carries across all three days — same character, same gold and XP, from Friday's cellar to Sunday's vault.</p>
     <label for="d_name">Your name</label><input id="d_name" value="${esc(me.name||"")}" placeholder="Captain">
     <label>Class</label>
     <div class="classpick" id="d_class">${Object.entries(DCLASSES).map(([k,c],idx)=>
       `<button data-dcls="${k}" class="${idx===0?"on":""}">${c.n}<small>${c.d}</small></button>`).join("")}</div>
-    ${isFirst?`<label for="d_count">How many people total are playing? (the game waits for everyone before Friday's scenario starts)</label>
-      <input id="d_count" type="number" min="1" max="20" placeholder="7">`:""}
     <div class="acts" style="margin-top:16px"><button class="btn go" id="d_go">Enter the Gauntlet</button></div></div>
   <div class="panel"><h3>How it plays</h3>
     <p>Every round you play two cards from your hand — one for its top action, one for its bottom. The number on the card
@@ -984,8 +1001,10 @@ function dRenderJoin(){
 function dRenderLobby(mine){
   const scn = DSCENARIOS[dungeon.scenarioIndex];
   if (dungeon.scenarioIndex===0) return dRenderWaitingRoom(scn, mine);
+  const isHost = dungeon.hostId===me.id;
   let h = `<div class="panel"><h3>${esc(scn.name)}</h3><p>${esc(scn.day)} · ${esc(scn.blurb)}</p>
-    <div class="acts"><button class="btn go" id="d_begin">Begin scenario</button></div></div>`;
+    ${isHost ? `<div class="acts"><button class="btn go" id="d_begin">Begin scenario</button></div>`
+             : `<p class="note">Waiting for ${esc(dungeon.hostName||"the host")} to start ${esc(scn.name)}.</p>`}</div>`;
   h += `<div class="panel"><h3>Your character</h3>
     <p>${DCLASSES[mine.cls].n} · Level ${dLevel(mine)} · ${mine.gold||0} gold</p>
     <label>Whetstone — permanent +1 to attacks (10 gold)</label>
@@ -1000,13 +1019,20 @@ function dRenderLobby(mine){
 function dRenderWaitingRoom(scn, mine){
   const need = dungeon.expectedCount, have = dungeon.players.length;
   const ready = need ? have>=need : true;
-  let h = `<div class="panel"><h3>${esc(scn.name)}</h3><p>${esc(scn.day)} · ${esc(scn.blurb)}</p></div>`;
+  const isHost = dungeon.hostId===me.id;
+  let h = dHostPanel();
+  h += `<div class="panel"><h3>${esc(scn.name)}</h3><p>${esc(scn.day)} · ${esc(scn.blurb)}</p></div>`;
   h += `<div class="panel"><h3>Waiting for the party</h3>
     <p>${have} of ${need||"?"} have joined.</p>
     ${dungeon.players.map(p=>`<div class="lb"><span class="nm">${esc(p.name)}<small>${DCLASSES[p.cls].n}</small></span></div>`).join("")}
-    <div class="acts"><button class="btn go" id="d_begin" ${ready?"":"disabled"}>${ready?"Begin scenario":"Waiting for everyone…"}</button></div>
-    ${!ready?`<div class="acts"><button class="btn ghost" id="d_beginanyway">Start now with ${have}</button></div>`:""}
-    <p class="note">${need?`Set to wait for ${need} — whoever creates a character first sets that number.`:""} Anyone can still join later; they'll just sit out until the next scenario.</p></div>`;
+    ${isHost ? `
+      <div class="acts"><button class="btn go" id="d_begin" ${ready?"":"disabled"}>${ready?"Begin scenario":"Waiting for everyone…"}</button></div>
+      ${!ready?`<div class="acts"><button class="btn ghost" id="d_beginanyway">Start now with ${have}</button></div>`:""}
+      <p class="note">${need?`Waiting for ${need} total.`:"Set a headcount below so the game knows when to unlock."} You're the host — you decide when to start.</p>
+      ${need==null?`<label for="d_count">How many people total?</label><input id="d_count" type="number" min="1" max="20" placeholder="7">
+        <div class="acts"><button class="btn ghost" id="d_setcount">Set headcount</button></div>`:""}
+    ` : `<p class="note">Waiting for ${esc(dungeon.hostName||"the host")} to start things off.</p>`}
+    </div>`;
   h += `<div class="panel"><h3>How to play</h3><div class="acts"><button class="btn ghost" id="d_tutorial">Show the quick tutorial</button></div></div>`;
   return h;
 }
@@ -1022,10 +1048,40 @@ function dRenderDefeat(){
     <div class="acts"><button class="btn go" id="d_retry">Retry this scenario</button></div></div>`;
 }
 
+/* ---- always-visible "where are we" status — round, phase, and who's up ---- */
+function dPhaseBanner(){
+  if (dungeon.sub==="selecting"){
+    const ready = dungeon.players.filter(p=>!p.ko && p.selected && p.selected.ready).length;
+    const total = dungeon.players.filter(p=>!p.ko).length;
+    return `<div class="phasebar"><span class="dot2"></span>Round ${dungeon.round} — choosing cards (${ready}/${total} ready)</div>`;
+  }
+  const entry = (dungeon.order||[])[dungeon.turnPtr];
+  if (!entry) return `<div class="phasebar"><span class="dot2"></span>Round ${dungeon.round} — wrapping up…</div>`;
+  if (entry.kind==="monster"){
+    const m = dungeon.monsters.find(x=>x.id===entry.id);
+    return `<div class="phasebar"><span class="dot2"></span>Round ${dungeon.round} — ${esc(m?m.name:"a monster")} is acting…</div>`;
+  }
+  const p = dungeon.players.find(x=>x.id===entry.id);
+  return `<div class="phasebar"><span class="dot2"></span>Round ${dungeon.round} — ${esc(p?p.name:"someone")}'s turn</div>`;
+}
+function dOrderList(){
+  if (dungeon.sub!=="resolving" || !dungeon.order || !dungeon.order.length) return "";
+  return `<div class="panel"><h3>Turn order</h3>
+    <div class="orderrow">${dungeon.order.map((e,i)=>{
+      const isNow=i===dungeon.turnPtr, isDone=i<dungeon.turnPtr;
+      let label, icon;
+      if (e.kind==="monster"){ const m=dungeon.monsters.find(x=>x.id===e.id); label=m?m.name:"?"; icon="👹"; }
+      else { const p=dungeon.players.find(x=>x.id===e.id); label=p?p.name:"?"; icon=p?DCLASS_STYLE[p.cls].icon:"?"; }
+      const short = label.length>9 ? label.slice(0,8)+"…" : label;
+      return `<div class="ochip ${isNow?"now":""} ${isDone?"done":""}">${icon} ${esc(short)}</div>`;
+    }).join("")}</div></div>`;
+}
+
 /* ---- render: an active battle ---- */
 function dRenderBattle(mine){
   const scn = dScn();
-  let h = `<div class="panel"><h3>${esc(scn.name)}</h3><p>Round ${dungeon.round}</p></div>`;
+  let h = dPhaseBanner();
+  h += `<div class="panel"><h3>${esc(scn.name)}</h3><p>Round ${dungeon.round}</p></div>`;
   h += dRenderMap(scn);
   h += `<div class="panel"><h3>Monsters</h3>` + dungeon.monsters.map(m=>{
     const pct = Math.max(0,Math.round(100*m.hp/m.maxHp));
@@ -1039,7 +1095,7 @@ function dRenderBattle(mine){
   }).join("") + `</div>`;
 
   if (dungeon.sub==="selecting") h += dRenderSelecting(mine);
-  else h += dRenderResolving(mine);
+  else { h += dOrderList(); h += dRenderResolving(mine); }
 
   h += `<div class="panel"><h3>What happened</h3>${dungeon.log.length?dungeon.log.slice(0,12).map(l=>`<div class="log">${l.t}</div>`).join(""):`<p>Nothing yet.</p>`}</div>`;
   return h;
@@ -1085,8 +1141,7 @@ function dRenderResolving(mine){
   if (!entry) return `<div class="panel"><h3>Round done</h3></div>`;
   if (entry.kind==="monster"){
     const m = dungeon.monsters.find(x=>x.id===entry.id);
-    return `<div class="turnbanner"><h2>${esc(m?m.name:"Monster")}'s turn</h2>
-      <div class="acts"><button class="btn go" id="d_monsterturn">Resolve it</button></div></div>`;
+    return `<div class="turnbanner"><h2>${esc(m?m.name:"Monster")}'s turn</h2><p class="who">Resolving on its own — just a second…</p></div>`;
   }
   const p = dungeon.players.find(x=>x.id===entry.id);
   if (entry.id!==mine.id) return `<div class="turnbanner"><h2>${esc(p.name)}'s turn</h2><p class="who">Waiting on them to act</p></div>`;
@@ -1124,7 +1179,7 @@ function dRenderMyTurn(p, scn){
 
 /* ---- click handlers for the dungeon game ---- */
 document.addEventListener("click", e=>{
-  const t = e.target.closest("[data-dcls],#d_go,#d_begin,#d_beginanyway,[data-buy],#d_retry,[data-card],#d_confirm,#d_unlock,[data-rest],#d_startround,#d_monsterturn,[data-act],#d_tutorial,[data-tut]");
+  const t = e.target.closest("[data-dcls],#d_go,#d_begin,#d_beginanyway,[data-buy],#d_retry,[data-card],#d_confirm,#d_unlock,[data-rest],#d_startround,[data-act],#d_tutorial,[data-tut],#d_claimhost,#d_reclaimhost,#d_setcount");
   if (!t) return; const g = n=>t.getAttribute(n);
 
   if (g("data-dcls")){ [...t.parentNode.children].forEach(b=>b.classList.remove("on")); t.classList.add("on"); return; }
@@ -1132,15 +1187,30 @@ document.addEventListener("click", e=>{
     const name=($("d_name").value||"").trim(); if(!name){ toast("Name first"); return; }
     const cls=$("d_class").querySelector(".on").getAttribute("data-dcls");
     me.name=name; saveMe();
-    if (dungeon.players.length===0){
-      const cEl=$("d_count"), n=cEl && +cEl.value;
-      dungeon.expectedCount = (n && n>0) ? Math.round(n) : null;
-    }
     dungeon.players.push({id:me.id,name,cls,gold:0,xp:0,hand:[],discard:[],lost:[],hp:0,maxHp:0,zone:0,shield:0,taunt:false,ko:false,selected:null,deck:[]});
     logD(`<b>${esc(name)}</b> the ${DCLASSES[cls].n} joins the Gauntlet`);
     saveDungeon(); render();
     if (!store.getItem("azsd.tutSeen")) dShowTutorial();
     return;
+  }
+  if (t.id==="d_claimhost"){
+    const nm = ($("d_name") && $("d_name").value.trim()) || prompt("Your name, for the host label:", me.name||"");
+    if (!nm) return;
+    dungeon.hostId=me.id; dungeon.hostName=nm; me.name=nm; saveMe();
+    saveDungeon(); render(); toast("You're the host"); return;
+  }
+  if (t.id==="d_reclaimhost"){
+    const nm = prompt("Your name, for the host label:", me.name||"");
+    if (!nm) return;
+    if (dungeon.hostId && !confirm(`Replace ${dungeon.hostName||"the current host"} as host?`)) return;
+    dungeon.hostId=me.id; dungeon.hostName=nm; me.name=nm; saveMe();
+    saveDungeon(); render(); toast("You're the host now"); return;
+  }
+  if (t.id==="d_setcount"){
+    const n = +(($("d_count")&&$("d_count").value)||0);
+    if (!n || n<1){ toast("Enter a number first"); return; }
+    dungeon.expectedCount = Math.round(n);
+    saveDungeon(); render(); return;
   }
   if (t.id==="d_tutorial"){ dShowTutorial(); return; }
   if (g("data-tut")){
@@ -1150,8 +1220,12 @@ document.addEventListener("click", e=>{
     else { closeSheet(); try{ store.setItem("azsd.tutSeen","1"); }catch(e){} return; }
     $("sheetin").innerHTML = dTutorialSlide(); return;
   }
-  if (t.id==="d_begin"){ dStartScenario(); saveDungeon(); render(); return; }
+  if (t.id==="d_begin"){
+    if (dungeon.hostId && dungeon.hostId!==me.id){ toast("Only "+(dungeon.hostName||"the host")+" can start this"); return; }
+    dStartScenario(); saveDungeon(); render(); return;
+  }
   if (t.id==="d_beginanyway"){
+    if (dungeon.hostId && dungeon.hostId!==me.id){ toast("Only "+(dungeon.hostName||"the host")+" can start this"); return; }
     if (confirm(`Start with only ${dungeon.players.length} players? Anyone who joins after will sit out until the next scenario.`)){
       dStartScenario(); saveDungeon(); render();
     }
@@ -1209,14 +1283,6 @@ document.addEventListener("click", e=>{
     dungeon.players.forEach(p=>{ if(p.selected&&p.selected.rest) p.selected=null; });
     saveDungeon(); render(); return;
   }
-  if (t.id==="d_monsterturn"){
-    if (dBusy) return; dBusy=true;
-    const scn=dScn(), entry=dungeon.order[dungeon.turnPtr], m=dungeon.monsters.find(x=>x.id===entry.id);
-    if (m && m.alive) dMonsterTurn(scn, m);
-    dungeon.turnPtr++;
-    if (!dCheckRoundEnd() && dungeon.turnPtr>=dungeon.order.length) dWrapRound();
-    saveDungeon(); dBusy=false; render(); return;
-  }
   if (g("data-act")){
     if (dBusy) return; dBusy=true;
     const mine=myDP(), scn=dScn(), step=mine._step||"top";
@@ -1244,6 +1310,38 @@ function dWrapRound(){
   dungeon.players.forEach(p=>{ p.shield=0; p.taunt=false; });
   dungeon.sub="selecting"; dungeon.order=[]; dungeon.turnPtr=0;
   logD(`Round ${dungeon.round} begins`);
+}
+
+/* ---- monster turns resolve themselves — nobody has to notice and tap a button.
+   Since every phone runs this same check, a short lock (via Firebase transaction)
+   makes sure only one of them actually executes a given monster's turn; a stale
+   lock (a phone that closed mid-turn) expires after 8s so play can't get stuck. ---- */
+let dAutoTimer = null, dAutoForKey = null;
+function dScheduleAutoResolve(){
+  if (!dungeon || dungeon.phase!=="battle" || dungeon.sub!=="resolving"){ dClearAutoResolve(); return; }
+  const entry = (dungeon.order||[])[dungeon.turnPtr];
+  if (!entry || entry.kind!=="monster"){ dClearAutoResolve(); return; }
+  const key = dungeon.round+":"+dungeon.turnPtr;
+  if (dAutoForKey===key) return;
+  dAutoForKey = key;
+  clearTimeout(dAutoTimer);
+  dAutoTimer = setTimeout(dAutoResolveMonster, 800+Math.random()*700);
+}
+function dClearAutoResolve(){ clearTimeout(dAutoTimer); dAutoTimer=null; dAutoForKey=null; }
+function dAutoResolveMonster(){
+  const proceed = ()=>{
+    const scn = dScn(), entry = (dungeon.order||[])[dungeon.turnPtr];
+    if (!entry || entry.kind!=="monster") return;
+    const m = dungeon.monsters.find(x=>x.id===entry.id);
+    if (m && m.alive) dMonsterTurn(scn, m);
+    dungeon.turnPtr++;
+    if (!dCheckRoundEnd() && dungeon.turnPtr>=dungeon.order.length) dWrapRound();
+    saveDungeon(); render();
+  };
+  if (!syncOn || !dRef){ proceed(); return; }
+  dRef.child("lock").transaction(cur => (cur && (Date.now()-(cur.at||0)<8000)) ? undefined : {at:Date.now()}, (err, committed)=>{
+    if (committed) proceed();
+  });
 }
 
 /* ---------- header ---------- */
@@ -1485,6 +1583,7 @@ function render(){
   renderNow(); renderTabs();
   $("main").innerHTML = view==="kit" ? renderKit() : view==="quest" ? renderQuest() : view==="gaunt" ? renderGaunt() : renderDay(view);
   $("editbar").hidden = !editing;
+  dScheduleAutoResolve();
 }
 
 /* ---------- events ---------- */
