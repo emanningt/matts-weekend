@@ -4,6 +4,9 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>AddyZaddySyrupDaddy — Phatty Weekend</title>
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+<meta http-equiv="Pragma" content="no-cache">
+<meta http-equiv="Expires" content="0">
 
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
@@ -262,6 +265,10 @@ const FIREBASE_CONFIG = {
   appId: "1:208929820537:web:14641f7e1f5cfe5448e9a8"
 };
 const ROOM = "phatty2026";
+/* Bumped every time I ship a change, so you can tell at a glance whether a phone
+   is actually running the latest code — the home-screen app has no address bar
+   and no refresh button, so this is the only reliable way to check. */
+const APP_BUILD = "sep 10, 9:05pm";
 
 /* ============================================================
    2. PLAN DATA — the itinerary everyone sees.
@@ -1358,6 +1365,10 @@ function dHostPanel(){
   const host = dungeon.hostId;
   const iHaveCharacter = !!myDP();
 
+  /* nothing to say about hosting until you actually have a character —
+     showing "who's running this" before character creation felt premature */
+  if (!iHaveCharacter && !host) return "";
+
   if (host && dHostIsOrphaned()){
     return `<div class="panel"><h3>Host slot is open</h3>
       <p>The previous host claim wasn't tied to a character, so it's been released.
@@ -1365,8 +1376,6 @@ function dHostPanel(){
       ${iHaveCharacter?`<div class="acts"><button class="btn go" id="d_claimhost">I'm running this</button></div>`:""}</div>`;
   }
   if (!host){
-    if (!iHaveCharacter) return `<div class="panel"><h3>Who's running this?</h3>
-      <p>Create your character first — then you can claim host. (Host is tied to your character, so it has to exist first.)</p></div>`;
     return `<div class="panel"><h3>Who's running this?</h3>
       <p>Whoever's hosting the trip should claim this — you'll control the headcount and when each scenario starts. Everyone else just plays.</p>
       <div class="acts"><button class="btn go" id="d_claimhost">I'm running this</button></div></div>`;
@@ -2127,6 +2136,10 @@ function renderKit(){
   plan.days.forEach(d=>d.items.forEach(i=>{ if(i.options&&i.options.length)
     decided.push({label:`${fullDay(d).slice(0,3)} · ${i.title}`, val:i.place?i.place.name:"Still open"}); }));
   return renderWeather() + renderMvp() + `
+  <div class="panel"><h3>🔄 App version</h3>
+    <p>Running build: <b style="color:var(--syrup)">${APP_BUILD}</b></p>
+    <p class="note" style="margin-top:6px">Added to your home screen? There's no refresh button there, so tap this if I've shipped a fix and you're still seeing the old version.</p>
+    <div class="acts"><button class="btn go" id="forceupdate">Check for updates</button></div></div>
   <div class="panel"><h3>The HQ</h3><p>${esc(plan.hq.addr)}</p>
     <div class="acts"><a class="btn go" href="${maps(plan.hq.q)}">Open in Maps</a>
     <button class="btn ghost" data-copy="${esc(plan.hq.addr)}">Copy address</button></div></div>
@@ -2180,6 +2193,17 @@ document.addEventListener("click", e=>{
     const d=plan.days.find(d=>d.items.some(i=>i.id===id)); const idx=d.items.findIndex(i=>i.id===id), to=idx+dir;
     if (to>=0&&to<d.items.length){ const [m]=d.items.splice(idx,1); d.items.splice(to,0,m); savePlan(); render(); } return; }
   if (g("data-kit")){ plan.kit[+g("data-kit")].done = !plan.kit[+g("data-kit")].done; savePlan(); render(); return; }
+  if (t.id==="forceupdate"){
+    /* A home-screen app has no address bar and no reload button, and iOS caches it
+       hard. Reloading with a fresh query string makes it a URL the cache has never
+       seen, which is the reliable way to pull down new code. */
+    toast("Fetching the latest…");
+    setTimeout(()=>{
+      const base = location.href.split("?")[0].split("#")[0];
+      location.replace(base + "?u=" + Date.now());
+    }, 400);
+    return;
+  }
   if (t.id==="addkit"){ const v=prompt("Add to the store list"); if(v){ plan.kit.push({text:v,done:false}); savePlan(); render(); } return; }
   if (t.id==="editoff"){ editing=false; render(); return; }
   if (t.id==="resetplan"){ if(confirm("Throw away your edits and go back to the published plan?")){
