@@ -445,7 +445,7 @@ function fbWrite(ref, data, label){
 }
 function saveGame(){
   try{ store.setItem(GKEY, JSON.stringify(game)); }catch(e){}
-  fbWrite(fbRef, game, "Quest game");
+  if (gSeenServer) fbWrite(fbRef, game, "Quest game");
 }
 game = loadGame();
 
@@ -490,6 +490,10 @@ function compressImage(file){
    games/{ROOM}/quest   -> the board game
    games/{ROOM}/dungeon -> the Groom's Gauntlet campaign */
 let dSyncToastShown = false, dSyncStage = "starting", dSyncError = "";
+/* until we have actually received the server's copy of the game once, this device
+   must not push its own state — otherwise a page refresh can race and overwrite
+   a live game with whatever stale/empty copy this browser happened to have */
+let dSeenServer = false, gSeenServer = false;
 function initSync(){
   try {
     if (!FIREBASE_CONFIG) return;
@@ -531,7 +535,8 @@ function initSync(){
         fbRef.on("value", snap => {
           const v = snap.val();
           if (v){ game = v; game.players = game.players || []; game.log = game.log || []; }
-          else { fbRef.set(game); }
+          else if (game && game.players && game.players.length) fbRef.set(fbSafe(game));
+          gSeenServer = true;
           if (view==="quest") render();
         });
         dRef.on("value", snap => {
@@ -542,13 +547,20 @@ function initSync(){
             const serverHasMine = v.players.some(p=>p.id===me.id);
             if (localMine && !serverHasMine && v.phase==="lobby" && v.scenarioIndex===0) v.players.push(localMine);
             dungeon = v; dungeon.log = dungeon.log || [];
-          } else { dRef.set(dungeon); }
+          } else {
+            /* Server has nothing. Only seed it if WE actually have a game worth
+               saving — otherwise a fresh page load (empty local state) would
+               overwrite everyone else's real game with a blank one. */
+            const localHasGame = dungeon && ((dungeon.players && dungeon.players.length) || dungeon.hostId);
+            if (localHasGame) dRef.set(fbSafe(dungeon));
+          }
+          dSeenServer = true;
           dScheduleAutoResolve();
           if (view==="gaunt" && !dBusy) render();
         }, err => { dSyncError = "database read refused: "+(err && err.message ? err.message : "unknown"); render(); });
         pRef.on("value", snap => {
           const v = snap.val();
-          if (v) photos = v; else if (photos.length) pRef.set(photos);
+          if (v) photos = v; else if (photos.length) pRef.set(fbSafe(photos));
           if (view==="quest") render();
         });
       })
@@ -743,7 +755,11 @@ const DCARDS = {
     {id:"wd6",n:"Sanctuary",    init:18, top:{a:"heal",val:4,rng:0},  bot:{a:"move",val:1}}
   ]
 };
-function dCard(cls,id){ return DCARDS[cls].find(c=>c.id===id); }
+function dCard(cls,id){
+  const deck = DCARDS[cls];
+  if (!deck) return null;
+  return deck.find(c=>c.id===id) || null;
+}
 const CLASS_CAP = 2; // with 7-8 players and 4 classes, capping at 2 each keeps the party spread out
 function dClassCounts(){
   const counts = {}; Object.keys(DCLASSES).forEach(k=>counts[k]=0);
@@ -854,7 +870,7 @@ function dTutorialSlide(){
 }
 function dShowTutorial(){ dTutStep=0; sheet(dTutorialSlide()); }
 function loadDungeon(){ try{ const r=store.getItem(DKEY); if(r) return JSON.parse(r); }catch(e){} return newDungeon(); }
-function saveDungeon(){ try{ store.setItem(DKEY, JSON.stringify(dungeon)); }catch(e){} fbWrite(dRef, dungeon, "Gauntlet"); }
+function saveDungeon(){ try{ store.setItem(DKEY, JSON.stringify(dungeon)); }catch(e){} if (dSeenServer) fbWrite(dRef, dungeon, "Gauntlet"); }
 const DKEY = "azsd.dungeon";
 const myDP = () => dungeon.players.find(p=>p.id===me.id);
 function logD(t){ dungeon.log.unshift({t,at:Date.now()}); dungeon.log = dungeon.log.slice(0,50); }
@@ -1505,7 +1521,7 @@ function dRenderSelecting(mine){
       Long rest: get everything back and heal 2, but you sit out this round.</p>
       <div class="acts"><button class="btn solid" data-rest="short">Short rest</button><button class="btn go" data-rest="long">Long rest</button></div></div>`;
   }
-  const cards = mine.hand.map(id=>dCard(mine.cls,id));
+  const cards = mine.hand.map(id=>dCard(mine.cls,id)).filter(Boolean);
   const cardA = dSel.a ? dCard(mine.cls,dSel.a) : null;
   const cardB = dSel.b ? dCard(mine.cls,dSel.b) : null;
   return `<div class="panel"><h3>Round ${dungeon.round} — pick two cards</h3>
@@ -1540,6 +1556,11 @@ function dRenderResolving(mine){
   if (!entry) return `<div class="panel"><h3>Round done</h3></div>`;
   if (entry.kind==="monster"){
     const m = dungeon.monsters.find(x=>x.id===entry.id);
+    if (dMonsterStalled()){
+      return `<div class="turnbanner"><h2>${esc(m?m.name:"Monster")}'s turn</h2>
+        <p class="who">This one's stuck — the host's phone may be asleep.</p>
+        <div class="acts"><button class="btn go" id="d_nudge">Tap to continue</button></div></div>`;
+    }
     return `<div class="turnbanner"><h2>${esc(m?m.name:"Monster")}'s turn</h2><p class="who">Resolving on its own — just a second…</p></div>`;
   }
   const p = dungeon.players.find(x=>x.id===entry.id);
@@ -1549,6 +1570,11 @@ function dRenderResolving(mine){
 function dRenderMyTurn(p, scn){
   const step = p._step || "top";
   const cardA = dCard(p.cls, p.selected.a), cardB = dCard(p.cls, p.selected.b);
+  if (!cardA || !cardB){
+    /* selection referenced a card we can't resolve — recover instead of crashing */
+    p.selected = null; p._step = null;
+    return `<div class="panel"><h3>Card mix-up</h3><p>Your cards couldn't be read — pick two again.</p></div>`;
+  }
   const action = step==="top" ? cardA.top : cardB.bot;
   const fromCard = step==="top" ? cardA : cardB;
   const otherCard = step==="top" ? cardB : cardA;
@@ -1591,7 +1617,7 @@ function dRenderMyTurn(p, scn){
 
 /* ---- click handlers for the dungeon game ---- */
 document.addEventListener("click", e=>{
-  const t = e.target.closest("[data-dcls],#d_go,#d_begin,#d_beginanyway,[data-buy],#d_retry,[data-card],#d_confirm,#d_unlock,[data-rest],#d_startround,[data-act],#d_tutorial,[data-tut],#d_claimhost,#d_releasehost,#d_setcount,#d_resetall,#d_retrysync,#d_dorestore,#d_clearerr,#d_centremap");
+  const t = e.target.closest("[data-dcls],#d_go,#d_begin,#d_beginanyway,[data-buy],#d_retry,[data-card],#d_confirm,#d_unlock,[data-rest],#d_startround,[data-act],#d_tutorial,[data-tut],#d_claimhost,#d_releasehost,#d_setcount,#d_resetall,#d_retrysync,#d_dorestore,#d_clearerr,#d_centremap,#d_nudge");
   if (!t) return; const g = n=>t.getAttribute(n);
 
   if (g("data-dcls")){ if(t.classList.contains("full")) return; [...t.parentNode.children].forEach(b=>b.classList.remove("on")); t.classList.add("on"); return; }
@@ -1627,6 +1653,11 @@ document.addEventListener("click", e=>{
     toast("Welcome back, "+found.name);
     return;
   }
+  if (t.id==="d_nudge"){
+    if (dBusy) return; dBusy=true;
+    dResolveMonsterNow();
+    dBusy=false; return;
+  }
   if (t.id==="d_centremap"){ dCentreMapOnMe(); return; }
   if (t.id==="d_clearerr"){ dSyncError=""; render(); return; }
   if (t.id==="d_retrysync"){
@@ -1641,9 +1672,11 @@ document.addEventListener("click", e=>{
     return;
   }
   if (t.id==="d_claimhost"){
-    const nm = ($("d_name") && $("d_name").value.trim()) || prompt("Your name, for the host label:", me.name||"");
-    if (!nm) return;
-    dClaimHostSafely(nm);
+    /* we already know who they are — host is only claimable once a character
+       exists, so take the name straight off it instead of asking again */
+    const mine = myDP();
+    if (!mine){ toast("Create your character first — host is tied to it"); return; }
+    dClaimHostSafely(mine.name);
     return;
   }
   if (t.id==="d_releasehost"){
@@ -1698,6 +1731,7 @@ document.addEventListener("click", e=>{
   }
   if (t.id==="d_confirm"){
     const mine=myDP(); const cardA=dCard(mine.cls,dSel.a);
+    if (!cardA || !dCard(mine.cls,dSel.b)){ toast("Couldn't read those cards — try again"); dSel={a:null,b:null}; render(); return; }
     mine.selected={a:dSel.a,b:dSel.b,initVal:cardA.init,ready:true};
     mine.hand = mine.hand.filter(id=>id!==dSel.a && id!==dSel.b);
     mine.discard = [...(mine.discard||[]), dSel.a, dSel.b];
@@ -1734,6 +1768,7 @@ document.addEventListener("click", e=>{
     if (dBusy) return; dBusy=true;
     const mine=myDP(), scn=dScn(), step=mine._step||"top";
     const card = step==="top" ? dCard(mine.cls,mine.selected.a) : dCard(mine.cls,mine.selected.b);
+    if (!card){ mine.selected=null; mine._step=null; dBusy=false; saveDungeon(); render(); return; }
     const action = step==="top" ? card.top : card.bot;
     const val = g("data-act"); const [kind,arg] = val.split("|");
     if (kind==="skip"){ /* no-op */ }
@@ -1768,26 +1803,52 @@ function dWrapRound(){
    multiple phones from racing to act on the same monster — simpler and more reliable
    than the Firebase transaction this used to use, which I was never able to test
    against a live connection from this environment. ---- */
-let dAutoTimer = null, dAutoForKey = null;
+let dAutoTimer = null, dAutoForKey = null, dStallKey = null, dStallSince = 0;
+function dTurnKey(){ return dungeon.round+":"+dungeon.turnPtr; }
 function dScheduleAutoResolve(){
   if (!dungeon || dungeon.phase!=="battle" || dungeon.sub!=="resolving"){ dClearAutoResolve(); return; }
   const entry = (dungeon.order||[])[dungeon.turnPtr];
   if (!entry || entry.kind!=="monster"){ dClearAutoResolve(); return; }
-  const key = dungeon.round+":"+dungeon.turnPtr;
+  const key = dTurnKey();
+  /* track how long this monster's turn has been sitting unresolved, so a stuck
+     one can be spotted and nudged instead of freezing the game forever */
+  if (dStallKey !== key){ dStallKey = key; dStallSince = Date.now(); }
   if (dAutoForKey===key) return;
   dAutoForKey = key;
   clearTimeout(dAutoTimer);
   dAutoTimer = setTimeout(dAutoResolveMonster, 800+Math.random()*700);
 }
-function dClearAutoResolve(){ clearTimeout(dAutoTimer); dAutoTimer=null; dAutoForKey=null; }
+function dClearAutoResolve(){ clearTimeout(dAutoTimer); dAutoTimer=null; dAutoForKey=null; dStallKey=null; dStallSince=0; }
+/* true when a monster's turn has been sitting there far longer than it should —
+   usually because the host's phone is asleep or backgrounded, so its timer never fired */
+function dMonsterStalled(){
+  if (!dungeon || dungeon.phase!=="battle" || dungeon.sub!=="resolving") return false;
+  const entry = (dungeon.order||[])[dungeon.turnPtr];
+  if (!entry || entry.kind!=="monster") return false;
+  return dStallSince && (Date.now() - dStallSince > 6000);
+}
 function dAutoResolveMonster(){
-  if (!dIAmHost()) return; // only the host's device acts, so nobody races
+  const key = dTurnKey();
+  if (!dIAmHost()){
+    /* not our job — but release the guard so this turn can be retried,
+       otherwise a single skipped attempt freezes the game permanently */
+    if (dAutoForKey===key) dAutoForKey = null;
+    return;
+  }
+  const entry = (dungeon.order||[])[dungeon.turnPtr];
+  if (!entry || entry.kind!=="monster"){ if (dAutoForKey===key) dAutoForKey=null; return; }
+  dResolveMonsterNow();
+}
+/* the actual work, callable by the auto-timer or by a human tapping the nudge button */
+function dResolveMonsterNow(){
   const entry = (dungeon.order||[])[dungeon.turnPtr];
   if (!entry || entry.kind!=="monster") return;
   const scn = dScn();
   const m = dungeon.monsters.find(x=>x.id===entry.id);
   if (m && m.alive) dMonsterTurn(scn, m);
+  else if (m) logD(`${esc(m.name)} is already down`);
   dungeon.turnPtr++;
+  dAutoForKey = null; dStallKey = null; dStallSince = 0;
   if (!dCheckRoundEnd() && dungeon.turnPtr>=dungeon.order.length) dWrapRound();
   saveDungeon(); render();
 }
@@ -2195,6 +2256,12 @@ function addStop(dayId){ sheet(form({}));
 /* ---------- start ---------- */
 (function(){
   render(); initSync(); fetchWeather(); setInterval(renderNow, 30000);
+  /* watch for a monster turn that never resolved, so the nudge button can surface */
+  let stallShown = false;
+  setInterval(()=>{
+    const stalled = dMonsterStalled();
+    if (stalled !== stallShown){ stallShown = stalled; if (view==="gaunt") render(); }
+  }, 2000);
 })();
 </script>
 </body>
