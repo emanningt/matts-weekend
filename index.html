@@ -163,7 +163,14 @@ label{display:block;color:var(--kelp);font-size:12.5px;margin-top:12px}
 .hcard.selB{border-color:var(--sunset)}
 .turnbanner{background:#132A38;border:1px solid var(--sunset);border-left:3px solid var(--sunset);border-radius:var(--r);padding:14px;margin-bottom:14px;text-align:center}
 .turnbanner h2{font-family:Anton,Impact,sans-serif;font-size:23px;text-transform:uppercase;letter-spacing:.01em}
-.targetlist button{display:block;width:100%;text-align:left;border:1px solid var(--ink-line);border-radius:var(--r);padding:11px 13px;margin-top:8px;font-size:14px;background:var(--ink-deep)}
+.targetlist h4{color:var(--go);font-size:13.5px;font-weight:700;text-transform:uppercase;letter-spacing:.03em;margin:0 0 4px;display:flex;align-items:center;gap:6px}
+.targetlist h4.atk{color:var(--sunset)}
+.targetlist button{display:flex;align-items:center;justify-content:space-between;gap:10px;width:100%;text-align:left;
+  border:2px solid var(--go);border-radius:var(--r);padding:14px 16px;margin-top:10px;font-size:15.5px;font-weight:700;
+  background:#153320;color:var(--sand)}
+.targetlist button.atk{border-color:var(--sunset);background:#331815}
+.targetlist button .chev{font-size:19px;opacity:.6;flex:none}
+.targetlist button:active{transform:translateY(1px)}
 
 /* ---------- phase banner + turn order ---------- */
 .phasebar{background:#132A38;border:1px solid var(--ink-line);border-left:3px solid var(--syrup);border-radius:var(--r);
@@ -461,13 +468,19 @@ function compressImage(file){
 /* Firebase — both games share one project, different paths so they never collide:
    games/{ROOM}/quest   -> the board game
    games/{ROOM}/dungeon -> the Groom's Gauntlet campaign */
+let dSyncToastShown = false;
 function initSync(){
-  if (!FIREBASE_CONFIG) return;
-  const load = src => new Promise(r=>{ const s=document.createElement("script"); s.src=src; s.onload=r; document.head.appendChild(s); });
-  load("https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js")
-    .then(()=>load("https://www.gstatic.com/firebasejs/10.12.0/firebase-database-compat.js"))
+  if (!FIREBASE_CONFIG || syncOn) return;
+  const load = src => new Promise((res,rej)=>{ const s=document.createElement("script"); s.src=src; s.onload=res; s.onerror=rej; document.head.appendChild(s); });
+  const loadBoth = () => load("https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js")
+    .then(()=>load("https://www.gstatic.com/firebasejs/10.12.0/firebase-database-compat.js"));
+  const attempt = (n) => loadBoth().catch(err => {
+    if (n<3) return new Promise(r=>setTimeout(r,1200)).then(()=>attempt(n+1));
+    throw err;
+  });
+  attempt(1)
     .then(()=>{
-      firebase.initializeApp(FIREBASE_CONFIG);
+      if (!firebase.apps.length) firebase.initializeApp(FIREBASE_CONFIG);
       fbRef = firebase.database().ref("games/"+ROOM+"/quest");
       dRef  = firebase.database().ref("games/"+ROOM+"/dungeon");
       pRef  = firebase.database().ref("games/"+ROOM+"/photos");
@@ -480,8 +493,17 @@ function initSync(){
       });
       dRef.on("value", snap => {
         const v = snap.val();
-        if (v){ dungeon = v; dungeon.players = dungeon.players || []; dungeon.log = dungeon.log || []; }
-        else { dRef.set(dungeon); }
+        if (v){
+          v.players = v.players || [];
+          /* if I made local progress (like just creating my character) that the server
+             hasn't seen yet — because my own connection was still catching up — fold it
+             back in instead of silently losing it. Only during initial setup, never once
+             a scenario's actually underway, to avoid touching live battle state. */
+          const localMine = dungeon && dungeon.players && dungeon.players.find(p=>p.id===me.id);
+          const serverHasMine = v.players.some(p=>p.id===me.id);
+          if (localMine && !serverHasMine && v.phase==="lobby" && v.scenarioIndex===0) v.players.push(localMine);
+          dungeon = v; dungeon.log = dungeon.log || [];
+        } else { dRef.set(dungeon); }
         dScheduleAutoResolve();
         if (view==="gaunt" && !dBusy) render();
       });
@@ -491,7 +513,11 @@ function initSync(){
         if (view==="quest") render();
       });
     })
-    .catch(()=>toast("Live sync did not load — running on this phone only"));
+    .catch(()=>{
+      if (!dSyncToastShown){ toast("Live sync did not load — retrying in the background"); dSyncToastShown = true; }
+      render();
+      setTimeout(initSync, 20000); // keep trying — a dead zone at launch shouldn't lock out sync for the whole session
+    });
 }
 const myPlayer = () => game.players.find(p=>p.id===me.id);
 const activeP  = () => game.players[game.turn % Math.max(game.players.length,1)];
@@ -1093,7 +1119,10 @@ function renderGaunt(){
   else if (dungeon.phase==="battle") h = dRenderBattle(mine);
   else if (dungeon.phase==="victory") h = dRenderVictory();
   else if (dungeon.phase==="defeat") h = dRenderDefeat();
-  return h + dResetPanel();
+  return h + dResetPanel() + dSyncStatus();
+}
+function dSyncStatus(){
+  return `<p class="mode">${syncOn ? "🟢 Live — synced, your progress is saved to everyone's game" : "🔴 Not synced — progress only lives on this phone right now"}</p>`;
 }
 function dResetPanel(){
   const canReset = !dungeon.hostId || dungeon.hostId===me.id;
@@ -1280,19 +1309,22 @@ function dRenderMyTurn(p, scn){
   else if (action.a==="heal") dungeon.players.filter(pl=>dDist(scn,p.zone,pl.zone)<=action.rng).forEach(pl=>highlight[pl.zone]="go");
   h += dRenderMap(scn, highlight);
 
-  h += `<div class="panel targetlist">`;
+  const prompts = {move:"👉 Tap where to move", attack:"👉 Tap who to attack", heal:"👉 Tap who to heal",
+    shield:"👉 Tap to brace", taunt:"👉 Tap to draw their attention"};
+  const isAtk = action.a==="attack";
+  h += `<div class="panel targetlist"><h4 class="${isAtk?"atk":""}">${prompts[action.a]||"👉 Tap to confirm"}</h4>`;
   if (action.a==="move"){
-    dReachable(scn,p.zone,action.val).forEach(z => h += `<button data-act="move|${z}">${esc(scn.zones[z])}</button>`);
-    if (!dReachable(scn,p.zone,action.val).length) h += `<button data-act="move|${p.zone}">Nowhere to go — skip</button>`;
+    dReachable(scn,p.zone,action.val).forEach(z => h += `<button data-act="move|${z}">${esc(scn.zones[z])}<span class="chev">›</span></button>`);
+    if (!dReachable(scn,p.zone,action.val).length) h += `<button data-act="move|${p.zone}">Nowhere to go — skip<span class="chev">›</span></button>`;
   } else if (action.a==="attack"){
     const inRange = dungeon.monsters.filter(m=>m.alive && dDist(scn,p.zone,m.zone)<=action.rng);
-    if (!inRange.length) h += `<button data-act="skip">Nothing in range — skip</button>`;
-    inRange.forEach(m => h += `<button data-act="attack|${m.id}">${esc(m.name)} (${m.hp}/${m.maxHp} HP, ${esc(scn.zones[m.zone])})</button>`);
+    if (!inRange.length) h += `<button class="atk" data-act="skip">Nothing in range — skip<span class="chev">›</span></button>`;
+    inRange.forEach(m => h += `<button class="atk" data-act="attack|${m.id}">${esc(m.name)} (${m.hp}/${m.maxHp} HP, ${esc(scn.zones[m.zone])})<span class="chev">›</span></button>`);
   } else if (action.a==="heal"){
     const inRange = dungeon.players.filter(pl=>dDist(scn,p.zone,pl.zone)<=action.rng);
-    inRange.forEach(pl => h += `<button data-act="heal|${pl.id}">${pl.id===p.id?"Yourself":esc(pl.name)} (${pl.hp}/${dMaxHp(pl)} HP)</button>`);
+    inRange.forEach(pl => h += `<button data-act="heal|${pl.id}">${pl.id===p.id?"Yourself":esc(pl.name)} (${pl.hp}/${dMaxHp(pl)} HP)<span class="chev">›</span></button>`);
   } else if (action.a==="shield" || action.a==="taunt"){
-    h += `<button data-act="self">Do it</button>`;
+    h += `<button data-act="self">Do it<span class="chev">›</span></button>`;
   }
   h += `</div>`;
   return h;
@@ -1442,9 +1474,10 @@ function dWrapRound(){
 }
 
 /* ---- monster turns resolve themselves — nobody has to notice and tap a button.
-   Since every phone runs this same check, a short lock (via Firebase transaction)
-   makes sure only one of them actually executes a given monster's turn; a stale
-   lock (a phone that closed mid-turn) expires after 8s so play can't get stuck. ---- */
+   Only the host's device actually processes a monster's turn, which is what keeps
+   multiple phones from racing to act on the same monster — simpler and more reliable
+   than the Firebase transaction this used to use, which I was never able to test
+   against a live connection from this environment. ---- */
 let dAutoTimer = null, dAutoForKey = null;
 function dScheduleAutoResolve(){
   if (!dungeon || dungeon.phase!=="battle" || dungeon.sub!=="resolving"){ dClearAutoResolve(); return; }
@@ -1458,19 +1491,15 @@ function dScheduleAutoResolve(){
 }
 function dClearAutoResolve(){ clearTimeout(dAutoTimer); dAutoTimer=null; dAutoForKey=null; }
 function dAutoResolveMonster(){
-  const proceed = ()=>{
-    const scn = dScn(), entry = (dungeon.order||[])[dungeon.turnPtr];
-    if (!entry || entry.kind!=="monster") return;
-    const m = dungeon.monsters.find(x=>x.id===entry.id);
-    if (m && m.alive) dMonsterTurn(scn, m);
-    dungeon.turnPtr++;
-    if (!dCheckRoundEnd() && dungeon.turnPtr>=dungeon.order.length) dWrapRound();
-    saveDungeon(); render();
-  };
-  if (!syncOn || !dRef){ proceed(); return; }
-  dRef.child("lock").transaction(cur => (cur && (Date.now()-(cur.at||0)<8000)) ? undefined : {at:Date.now()}, (err, committed)=>{
-    if (committed) proceed();
-  });
+  if (dungeon.hostId && dungeon.hostId!==me.id) return; // only the host's device acts, so nobody races
+  const entry = (dungeon.order||[])[dungeon.turnPtr];
+  if (!entry || entry.kind!=="monster") return;
+  const scn = dScn();
+  const m = dungeon.monsters.find(x=>x.id===entry.id);
+  if (m && m.alive) dMonsterTurn(scn, m);
+  dungeon.turnPtr++;
+  if (!dCheckRoundEnd() && dungeon.turnPtr>=dungeon.order.length) dWrapRound();
+  saveDungeon(); render();
 }
 
 /* ---------- header ---------- */
@@ -1636,7 +1665,7 @@ function renderJoin(){
     <p>Roll a d20 on your turn and move up the track. Quest tiles hand you a real challenge with a stat check —
     pull it off and another player confirms it for XP. Taverns cost gold and buy goodwill. Traps skip your turn.
     Most XP by Sunday brunch wins.</p></div>
-  <p class="mode">${FIREBASE_CONFIG?"Live sync on":"This phone only — pass it around to take turns"}</p>`;
+  <p class="mode">${syncOn ? "🟢 Live sync on" : "🔴 Not synced yet — this phone only for now"}</p>`;
 }
 
 /* ---------- kit tab ---------- */
