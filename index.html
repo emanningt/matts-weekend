@@ -1184,7 +1184,7 @@ function dSyncStatus(){
     <p class="note" style="margin-top:8px">If this keeps failing, screenshot this box — the status and error tell us exactly what's wrong.</p></div>`;
 }
 function dResetPanel(){
-  const canReset = !dungeon.hostId || dungeon.hostId===me.id;
+  const canReset = dIAmHost();
   if (!canReset) return "";
   return `<div class="panel"><h3>Reset</h3><p>Wipes every character, the host claim, and progress — good for testing today before the trip.</p>
     <div class="acts"><button class="btn warn" id="d_resetall">Reset the Gauntlet</button></div></div>`;
@@ -1194,6 +1194,10 @@ function dResetPanel(){
    takeover path — the current host must release it first. A device that can't
    reach the server refuses rather than pretending it succeeded. */
 function dClaimHostSafely(nm){
+  if (!myDP()){
+    toast("Create your character first — host is tied to it");
+    return;
+  }
   if (!syncOn || !dRef){
     toast("Can't claim host while offline — connect first");
     render(); return;
@@ -1202,7 +1206,8 @@ function dClaimHostSafely(nm){
   dRef.child("hostId").once("value")
     .then(snap=>{
       const serverHost = snap.val();
-      if (serverHost && serverHost!==me.id){
+      const serverHostIsReal = serverHost && dungeon.players.some(p=>p.id===serverHost);
+      if (serverHost && serverHost!==me.id && serverHostIsReal){
         toast((dungeon.hostName||"Someone")+" is already host");
         render(); return;
       }
@@ -1221,11 +1226,34 @@ function dClaimHostSafely(nm){
       render();
     });
 }
+/* A host claim is only meaningful once you have a character, because your identity
+   comes from your recovery code — claiming first would tie host to a temporary ID
+   that stops existing the moment you create your character. If that ever happens
+   anyway (or a host's character is wiped), the claim is orphaned and we free it. */
+function dHostIsOrphaned(){
+  return !!dungeon.hostId && !dungeon.players.some(p=>p.id===dungeon.hostId);
+}
+/* one source of truth for host permissions — an orphaned claim counts as no host,
+   so a stale ID can never lock the whole party out of starting or resetting */
+function dRealHostId(){ return dHostIsOrphaned() ? null : (dungeon.hostId || null); }
+function dIAmHost(){ const h = dRealHostId(); return !h || h === me.id; }
 function dHostPanel(){
   const host = dungeon.hostId;
-  if (!host) return `<div class="panel"><h3>Who's running this?</h3>
-    <p>Whoever's hosting the trip should claim this — you'll control the headcount and when each scenario starts. Everyone else just plays.</p>
-    <div class="acts"><button class="btn go" id="d_claimhost">I'm running this</button></div></div>`;
+  const iHaveCharacter = !!myDP();
+
+  if (host && dHostIsOrphaned()){
+    return `<div class="panel"><h3>Host slot is open</h3>
+      <p>The previous host claim wasn't tied to a character, so it's been released.
+      ${iHaveCharacter?"You can claim it now.":"Create your character below, then claim it."}</p>
+      ${iHaveCharacter?`<div class="acts"><button class="btn go" id="d_claimhost">I'm running this</button></div>`:""}</div>`;
+  }
+  if (!host){
+    if (!iHaveCharacter) return `<div class="panel"><h3>Who's running this?</h3>
+      <p>Create your character first — then you can claim host. (Host is tied to your character, so it has to exist first.)</p></div>`;
+    return `<div class="panel"><h3>Who's running this?</h3>
+      <p>Whoever's hosting the trip should claim this — you'll control the headcount and when each scenario starts. Everyone else just plays.</p>
+      <div class="acts"><button class="btn go" id="d_claimhost">I'm running this</button></div></div>`;
+  }
   if (host===me.id) return `<div class="panel"><h3>You're the host</h3>
     <p>You control the headcount and when each scenario starts. Everything else — cards, moves, turns — anyone can drive. Nobody else can take host from you.</p>
     <div class="acts"><button class="btn ghost" id="d_releasehost">Release host</button></div>
@@ -1267,7 +1295,7 @@ function dRenderJoin(){
 function dRenderLobby(mine){
   const scn = DSCENARIOS[dungeon.scenarioIndex];
   if (dungeon.scenarioIndex===0) return dRenderWaitingRoom(scn, mine);
-  const isHost = dungeon.hostId===me.id;
+  const isHost = dRealHostId() === me.id;
   let h = `<div class="panel"><h3>${esc(scn.name)}</h3><p>${esc(scn.day)} · ${esc(scn.blurb)}</p>
     ${isHost ? `<div class="acts"><button class="btn go" id="d_begin">Begin scenario</button></div>`
              : `<p class="note">Waiting for ${esc(dungeon.hostName||"the host")} to start ${esc(scn.name)}.</p>`}</div>`;
@@ -1286,7 +1314,7 @@ function dRenderLobby(mine){
 function dRenderWaitingRoom(scn, mine){
   const need = dungeon.expectedCount, have = dungeon.players.length;
   const ready = need ? have>=need : true;
-  const isHost = dungeon.hostId===me.id;
+  const isHost = dRealHostId() === me.id;
   let h = dHostPanel();
   h += `<div class="panel"><h3>${esc(scn.name)}</h3><p>${esc(scn.day)} · ${esc(scn.blurb)}</p></div>`;
   h += `<div class="panel"><h3>Waiting for the party</h3>
@@ -1481,7 +1509,7 @@ document.addEventListener("click", e=>{
     toast("Reconnecting…"); render(); initSync(); return;
   }
   if (t.id==="d_resetall"){
-    if (dungeon.hostId && dungeon.hostId!==me.id){ toast("Only "+(dungeon.hostName||"the host")+" can reset this"); return; }
+    if (!dIAmHost()){ toast("Only "+(dungeon.hostName||"the host")+" can reset this"); return; }
     if (confirm("Reset the whole Gauntlet — everyone's characters, progress, and the host claim? This can't be undone.")){
       dungeon = newDungeon(); saveDungeon(); render(); toast("Gauntlet reset");
     }
@@ -1515,11 +1543,11 @@ document.addEventListener("click", e=>{
     $("sheetin").innerHTML = dTutorialSlide(); return;
   }
   if (t.id==="d_begin"){
-    if (dungeon.hostId && dungeon.hostId!==me.id){ toast("Only "+(dungeon.hostName||"the host")+" can start this"); return; }
+    if (!dIAmHost()){ toast("Only "+(dungeon.hostName||"the host")+" can start this"); return; }
     dStartScenario(); saveDungeon(); render(); return;
   }
   if (t.id==="d_beginanyway"){
-    if (dungeon.hostId && dungeon.hostId!==me.id){ toast("Only "+(dungeon.hostName||"the host")+" can start this"); return; }
+    if (!dIAmHost()){ toast("Only "+(dungeon.hostName||"the host")+" can start this"); return; }
     if (confirm(`Start with only ${dungeon.players.length} players? Anyone who joins after will sit out until the next scenario.`)){
       dStartScenario(); saveDungeon(); render();
     }
@@ -1624,7 +1652,7 @@ function dScheduleAutoResolve(){
 }
 function dClearAutoResolve(){ clearTimeout(dAutoTimer); dAutoTimer=null; dAutoForKey=null; }
 function dAutoResolveMonster(){
-  if (dungeon.hostId && dungeon.hostId!==me.id) return; // only the host's device acts, so nobody races
+  if (!dIAmHost()) return; // only the host's device acts, so nobody races
   const entry = (dungeon.order||[])[dungeon.turnPtr];
   if (!entry || entry.kind!=="monster") return;
   const scn = dScn();
