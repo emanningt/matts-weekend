@@ -46,10 +46,11 @@ header{background:var(--ink-deep);border-bottom:1px solid var(--ink-line);paddin
 
 nav{position:sticky;top:0;z-index:40;background:rgba(10,22,30,.94);backdrop-filter:blur(10px);
     -webkit-backdrop-filter:blur(10px);border-bottom:1px solid var(--ink-line)}
-.tabs{display:flex;max-width:640px;margin:0 auto}
-.tab{flex:1;min-width:0;padding:11px 1px 10px;text-align:center;border-bottom:2px solid transparent;color:var(--kelp);font-size:10.5px;font-weight:600;overflow:hidden}
-.tab b{display:block;font-weight:700;font-size:13px;color:inherit;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.tab.on{color:var(--sand);border-bottom-color:var(--syrup)}
+.tabs{display:flex;max-width:640px;margin:0 auto;padding:7px 5px;gap:3px}
+.tab{flex:1;min-width:0;padding:9px 1px 8px;text-align:center;border-radius:9px;color:var(--kelp);overflow:hidden}
+.tab i{display:block;font-style:normal;font-size:18px;line-height:1.15;font-weight:700}
+.tab b{display:block;font-weight:700;font-size:11.5px;color:inherit;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;margin-top:3px}
+.tab.on{color:#14252F;background:var(--syrup)}
 
 main{padding:18px 0 40px}
 .rule{color:var(--kelp);font-size:13px;line-height:1.5;border-left:2px solid var(--ink-line);padding-left:12px;margin:0 0 20px}
@@ -422,9 +423,29 @@ function loadMe(){ try{ const r=store.getItem(MKEY); if(r) return JSON.parse(r);
 function saveMe(){ store.setItem(MKEY,JSON.stringify(me)); }
 function newGame(){ return {started:false, players:[], turn:0, log:[], card:null, roll:null, decks:{}, v:1}; }
 function loadGame(){ try{ const r=store.getItem(GKEY); if(r) return JSON.parse(r); }catch(e){} return newGame(); }
+/* Firebase throws immediately on any `undefined` value anywhere in the object,
+   which localStorage silently tolerates — so state that saved fine locally could
+   blow up the moment it synced. Round-tripping through JSON drops undefined the
+   same way localStorage does, giving Firebase something it will always accept. */
+function fbSafe(obj){
+  try { return JSON.parse(JSON.stringify(obj)); }
+  catch(e){ return obj; }
+}
+function fbWrite(ref, data, label){
+  if (!syncOn || !ref) return;
+  try {
+    ref.set(fbSafe(data)).catch(err=>{
+      dSyncError = label+" failed to save: "+(err && err.message ? err.message : "unknown");
+      render();
+    });
+  } catch(err){
+    dSyncError = label+" rejected: "+(err && err.message ? err.message : String(err));
+    render();
+  }
+}
 function saveGame(){
   try{ store.setItem(GKEY, JSON.stringify(game)); }catch(e){}
-  if (syncOn && fbRef) fbRef.set(game);
+  fbWrite(fbRef, game, "Quest game");
 }
 game = loadGame();
 
@@ -444,7 +465,7 @@ let photos = loadPhotos();
 function loadPhotos(){ try{ const r=store.getItem(PHKEY); if(r) return JSON.parse(r); }catch(e){} return []; }
 function savePhotos(){
   try{ store.setItem(PHKEY, JSON.stringify(photos)); }catch(e){}
-  if (syncOn && pRef) pRef.set(photos);
+  fbWrite(pRef, photos, "Photos");
 }
 function compressImage(file){
   return new Promise((resolve,reject)=>{
@@ -831,7 +852,7 @@ function dTutorialSlide(){
 }
 function dShowTutorial(){ dTutStep=0; sheet(dTutorialSlide()); }
 function loadDungeon(){ try{ const r=store.getItem(DKEY); if(r) return JSON.parse(r); }catch(e){} return newDungeon(); }
-function saveDungeon(){ try{ store.setItem(DKEY, JSON.stringify(dungeon)); }catch(e){} if (syncOn && dRef) dRef.set(dungeon); }
+function saveDungeon(){ try{ store.setItem(DKEY, JSON.stringify(dungeon)); }catch(e){} fbWrite(dRef, dungeon, "Gauntlet"); }
 const DKEY = "azsd.dungeon";
 const myDP = () => dungeon.players.find(p=>p.id===me.id);
 function logD(t){ dungeon.log.unshift({t,at:Date.now()}); dungeon.log = dungeon.log.slice(0,50); }
@@ -1149,12 +1170,16 @@ function renderGaunt(){
   return h + dResetPanel() + dSyncStatus();
 }
 function dSyncStatus(){
-  if (syncOn) return `<p class="mode">🟢 Live — synced, everyone sees the same game</p>`;
-  return `<div class="panel" style="border-color:var(--sunset)">
+  const errBox = dSyncError ? `<div class="panel" style="border-color:var(--sunset)">
+    <h3 style="color:var(--sunset)">⚠️ Something went wrong</h3>
+    <p style="margin-top:4px"><b style="color:var(--sand)">Error:</b> ${esc(dSyncError)}</p>
+    <div class="acts"><button class="btn ghost" id="d_clearerr">Dismiss</button></div>
+    <p class="note" style="margin-top:8px">Screenshot this — the error text says exactly what failed.</p></div>` : "";
+  if (syncOn) return errBox + `<p class="mode">🟢 Live — synced, everyone sees the same game</p>`;
+  return errBox + `<div class="panel" style="border-color:var(--sunset)">
     <h3 style="color:var(--sunset)">🔴 Not synced</h3>
     <p>Progress is only on this phone right now. Others won't see it and it isn't backed up.</p>
     <p style="margin-top:8px"><b style="color:var(--sand)">Status:</b> ${esc(dSyncStage)}</p>
-    ${dSyncError?`<p style="margin-top:4px"><b style="color:var(--sand)">Error:</b> ${esc(dSyncError)}</p>`:""}
     <div class="acts"><button class="btn go" id="d_retrysync">Try connecting again</button></div>
     <p class="note" style="margin-top:8px">If this keeps failing, screenshot this box — the status and error tell us exactly what's wrong.</p></div>`;
 }
@@ -1181,12 +1206,18 @@ function dClaimHostSafely(nm){
         toast((dungeon.hostName||"Someone")+" is already host");
         render(); return;
       }
-      dungeon.hostId=me.id; dungeon.hostName=nm; me.name=nm; saveMe();
-      saveDungeon(); render(); toast("You're the host");
+      try {
+        dungeon.hostId=me.id; dungeon.hostName=nm; me.name=nm; saveMe();
+        saveDungeon(); render(); toast("You're the host");
+      } catch(inner){
+        dungeon.hostId=null; dungeon.hostName=null;
+        dSyncError = "claiming host failed while saving: "+(inner && inner.message ? inner.message : String(inner));
+        render();
+      }
     })
     .catch(e=>{
       dSyncError = "host check failed: "+(e && e.message ? e.message : "unknown");
-      toast("Couldn't confirm host — check the status at the bottom");
+      toast("Couldn't confirm host — see the error above");
       render();
     });
 }
@@ -1408,7 +1439,7 @@ function dRenderMyTurn(p, scn){
 
 /* ---- click handlers for the dungeon game ---- */
 document.addEventListener("click", e=>{
-  const t = e.target.closest("[data-dcls],#d_go,#d_begin,#d_beginanyway,[data-buy],#d_retry,[data-card],#d_confirm,#d_unlock,[data-rest],#d_startround,[data-act],#d_tutorial,[data-tut],#d_claimhost,#d_releasehost,#d_setcount,#d_resetall,#d_retrysync,#d_dorestore");
+  const t = e.target.closest("[data-dcls],#d_go,#d_begin,#d_beginanyway,[data-buy],#d_retry,[data-card],#d_confirm,#d_unlock,[data-rest],#d_startround,[data-act],#d_tutorial,[data-tut],#d_claimhost,#d_releasehost,#d_setcount,#d_resetall,#d_retrysync,#d_dorestore,#d_clearerr");
   if (!t) return; const g = n=>t.getAttribute(n);
 
   if (g("data-dcls")){ if(t.classList.contains("full")) return; [...t.parentNode.children].forEach(b=>b.classList.remove("on")); t.classList.add("on"); return; }
@@ -1444,6 +1475,7 @@ document.addEventListener("click", e=>{
     toast("Welcome back, "+found.name);
     return;
   }
+  if (t.id==="d_clearerr"){ dSyncError=""; render(); return; }
   if (t.id==="d_retrysync"){
     dSyncStage="starting"; dSyncError=""; dSyncToastShown=false;
     toast("Reconnecting…"); render(); initSync(); return;
@@ -1621,12 +1653,12 @@ function renderNow(){
 }
 function renderTabs(){
   $("tabs").innerHTML =
-    `<button class="tab ${view==="gaunt"?"on":""}" data-tab="gaunt"><b>Vault</b>crawl</button>`
+    `<button class="tab ${view==="gaunt"?"on":""}" data-tab="gaunt"><i>⚔️</i><b>Vault</b></button>`
     + plan.days.map(d=>
-    `<button class="tab ${view===d.id?"on":""}" data-tab="${d.id}"><b>${fullDay(d).slice(0,3)}</b>${d.date.slice(-2)}</button>`).join("")
-    + `<button class="tab ${view==="quest"?"on":""}" data-tab="quest"><b>Quest</b>game</button>`
-    + `<button class="tab ${view==="kit"?"on":""}" data-tab="kit"><b>Kit</b>list</button>`
-    + `<button class="tab ${view==="song"?"on":""}" data-tab="song"><b>Song</b>shanty</button>`;
+    `<button class="tab ${view===d.id?"on":""}" data-tab="${d.id}"><i>${d.date.slice(-2)}</i><b>${fullDay(d).slice(0,3)}</b></button>`).join("")
+    + `<button class="tab ${view==="quest"?"on":""}" data-tab="quest"><i>🎲</i><b>Quest</b></button>`
+    + `<button class="tab ${view==="kit"?"on":""}" data-tab="kit"><i>🎒</i><b>Kit</b></button>`
+    + `<button class="tab ${view==="song"?"on":""}" data-tab="song"><i>⚓</i><b>Song</b></button>`;
 }
 
 /* ---------- itinerary ---------- */
