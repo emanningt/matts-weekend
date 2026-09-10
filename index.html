@@ -30,6 +30,9 @@ body{background:var(--ink);color:var(--sand);font-family:Inter,-apple-system,Bli
      font-size:16px;line-height:1.45;padding-bottom:env(safe-area-inset-bottom);overscroll-behavior-y:none}
 h1,h2,h3,h4{margin:0;font-weight:600}
 button{font:inherit;color:inherit;background:none;border:none;cursor:pointer}
+#updatebanner:empty{display:none}
+.updatebar{background:var(--syrup);color:#14252F;padding:10px 16px;text-align:center;font-weight:700;font-size:13.5px;cursor:pointer;position:sticky;top:0;z-index:50}
+.updatebar small{display:block;font-weight:600;opacity:.8;font-size:11.5px;margin-top:1px}
 a{color:var(--syrup)}
 .wrap{max-width:640px;margin:0 auto;padding:0 16px}
 
@@ -238,6 +241,7 @@ label{display:block;color:var(--kelp);font-size:12.5px;margin-top:12px}
   </div>
 </header>
 
+<div id="updatebanner"></div>
 <nav><div class="tabs" id="tabs"></div></nav>
 <main class="wrap" id="main"></main>
 
@@ -268,7 +272,35 @@ const ROOM = "phatty2026";
 /* Bumped every time I ship a change, so you can tell at a glance whether a phone
    is actually running the latest code — the home-screen app has no address bar
    and no refresh button, so this is the only reliable way to check. */
-const APP_BUILD = "sep 10, 9:05pm";
+const APP_BUILD = "sep 10, 9:15pm";
+/* Home-screen apps have no refresh button and don't know to check for updates —
+   so instead of waiting for someone to remember to look, we periodically fetch
+   the live file ourselves and compare build stamps. Any mismatch, on any screen,
+   surfaces as a banner nobody has to go looking for. */
+let dNewBuild = null;
+async function dCheckForNewBuild(){
+  try {
+    const res = await fetch(location.pathname + "?v=" + Date.now(), {cache:"no-store"});
+    if (!res.ok) return;
+    const text = await res.text();
+    const m = text.match(/const APP_BUILD = "([^"]+)"/);
+    if (m && m[1] && m[1] !== APP_BUILD){
+      dNewBuild = m[1];
+      renderUpdateBanner();
+    }
+  } catch(e){ /* offline right now — try again on the next interval */ }
+}
+function renderUpdateBanner(){
+  const el = document.getElementById("updatebanner");
+  if (!el) return;
+  el.innerHTML = dNewBuild
+    ? `<div class="updatebar" id="d_applyupdate">🔄 A new version is ready — tap to update<small>you're on ${esc(APP_BUILD)}, ${esc(dNewBuild)} is live</small></div>`
+    : "";
+}
+function dApplyUpdate(){
+  const base = location.href.split("?")[0].split("#")[0];
+  location.replace(base + "?u=" + Date.now());
+}
 
 /* ============================================================
    2. PLAN DATA — the itinerary everyone sees.
@@ -2176,9 +2208,10 @@ function render(){
 
 /* ---------- events ---------- */
 document.addEventListener("click", e=>{
-  const t = e.target.closest("[data-tab],[data-open],[data-pick],[data-done],[data-edit],[data-add],[data-up],[data-down],[data-copy],[data-kit],[data-cls],[data-av],[data-res],#addkit,#copyplan,#resetplan,#editoff,#roll,#j_go,#resetgame,#clearphotos");
+  const t = e.target.closest("[data-tab],[data-open],[data-pick],[data-done],[data-edit],[data-add],[data-up],[data-down],[data-copy],[data-kit],[data-cls],[data-av],[data-res],#addkit,#copyplan,#resetplan,#editoff,#roll,#j_go,#resetgame,#clearphotos,#d_applyupdate");
   if (!t) return; const g = n=>t.getAttribute(n);
 
+  if (t.id==="d_applyupdate"){ dApplyUpdate(); return; }
   if (g("data-tab")){ view=g("data-tab"); open=null; render(); window.scrollTo({top:0,behavior:"smooth"}); return; }
   if (g("data-open")){ open = open===g("data-open")?null:g("data-open"); render(); return; }
   if (g("data-copy")){ copy(g("data-copy")); return; }
@@ -2280,6 +2313,9 @@ function addStop(dayId){ sheet(form({}));
 /* ---------- start ---------- */
 (function(){
   render(); initSync(); fetchWeather(); setInterval(renderNow, 30000);
+  dCheckForNewBuild();
+  setInterval(dCheckForNewBuild, 120000);
+  document.addEventListener("visibilitychange", ()=>{ if (!document.hidden) dCheckForNewBuild(); });
   /* watch for a monster turn that never resolved, so the nudge button can surface */
   let stallShown = false;
   setInterval(()=>{
