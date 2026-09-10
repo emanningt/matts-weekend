@@ -775,57 +775,57 @@ const DSCENARIOS = [
     zones:["Stairwell","Wine Racks","Keg Room","Back Corner"],
     adj:[[1],[0,2],[1,3],[2]], start:0,
     spawns:[
-      {name:"Cellar Rat", hp:6, dmg:2, rng:0, init:25, behavior:"melee", count:4, zone:2}
-    ], reward:{gold:6,xp:10} },
+      {name:"Cellar Rat", hp:8, dmg:3, rng:0, init:25, behavior:"melee", count:5, zone:2}
+    ], treasure:[{zone:3, gold:4, xp:3}], reward:{gold:6,xp:10} },
   { id:"f2", name:"The Wine Cellar", day:"Friday night", blurb:"The rats came from somewhere deeper.",
     zones:["Cellar Stairs","Barrel Row","Wine Racks","Sump Pit","Old Boiler"],
     adj:[[1],[0,2,3],[1],[1,4],[3]], start:0,
     spawns:[
-      {name:"Cellar Rat", hp:6, dmg:2, rng:0, init:25, behavior:"melee", count:3, zone:2},
-      {name:"Barrel Roller", hp:9, dmg:3, rng:0, init:20, behavior:"melee", count:3, zone:4}
-    ], reward:{gold:9,xp:14} },
+      {name:"Cellar Rat", hp:7, dmg:3, rng:0, init:25, behavior:"melee", count:3, zone:2},
+      {name:"Barrel Roller", hp:11, dmg:4, rng:0, init:20, behavior:"melee", count:3, zone:4}
+    ], treasure:[{zone:3, gold:5, xp:4}], reward:{gold:9,xp:14} },
   { id:"f3", name:"The Keg Warden's Den", day:"Friday night", blurb:"Whatever's been directing them is close now.",
     zones:["Boiler Passage","Fermenting Room","Warden's Vault","Cellar's End"],
     adj:[[1,3],[0,2],[1,3],[2,0]], start:0,
     spawns:[
-      {name:"Barrel Roller", hp:9, dmg:3, rng:0, init:20, behavior:"melee", count:2, zone:2},
-      {name:"Cellar Rat", hp:6, dmg:2, rng:0, init:25, behavior:"melee", count:2, zone:2},
-      {name:"The Keg Warden", hp:20, dmg:4, rng:0, init:45, behavior:"boss1", count:1, zone:2, boss:true}
-    ], reward:{gold:11,xp:16} },
+      {name:"Barrel Roller", hp:11, dmg:4, rng:0, init:20, behavior:"melee", count:2, zone:2},
+      {name:"Cellar Rat", hp:7, dmg:3, rng:0, init:25, behavior:"melee", count:2, zone:2},
+      {name:"The Keg Warden", hp:34, dmg:6, rng:0, init:45, behavior:"boss1", count:1, zone:2, boss:true}
+    ], treasure:[{zone:3, gold:6, xp:5}], reward:{gold:11,xp:16} },
 
   /* SATURDAY — the sunken chapel, three-part ascent */
   { id:"s1", name:"The Chapel Steps", day:"Saturday", blurb:"Nobody's used this chapel in years.",
     zones:["Outer Steps","Chapel Doors","Nave","Side Chapel"],
     adj:[[1],[0,2],[1,3],[2]], start:0,
     spawns:[
-      {name:"Bone Walker", hp:12, dmg:3, rng:0, init:22, behavior:"melee", count:3, zone:2},
-      {name:"Cult Acolyte", hp:8, dmg:2, rng:2, init:30, behavior:"ranged", count:2, zone:3}
-    ], reward:{gold:9,xp:14} },
+      {name:"Bone Walker", hp:15, dmg:4, rng:0, init:22, behavior:"melee", count:4, zone:2},
+      {name:"Cult Acolyte", hp:9, dmg:3, rng:2, init:30, behavior:"ranged", count:2, zone:3}
+    ], treasure:[{zone:3, gold:5, xp:4}], reward:{gold:9,xp:14} },
   { id:"s2", name:"The Bell Tower", day:"Saturday", blurb:"Something's been ringing that bell.",
     zones:["Nave","Spiral Stair","Choir Loft","Bell Chamber","Belfry Roof"],
     adj:[[1],[0,2],[1,3,4],[2],[2]], start:0,
     spawns:[
-      {name:"Cult Acolyte", hp:8, dmg:2, rng:2, init:30, behavior:"ranged", count:4, zone:3},
-      {name:"Bone Walker", hp:10, dmg:3, rng:0, init:22, behavior:"melee", count:3, zone:4}
-    ], reward:{gold:9,xp:14} },
+      {name:"Cult Acolyte", hp:9, dmg:3, rng:2, init:30, behavior:"ranged", count:4, zone:3},
+      {name:"Bone Walker", hp:13, dmg:4, rng:0, init:22, behavior:"melee", count:3, zone:4}
+    ], treasure:[{zone:4, gold:6, xp:5}], reward:{gold:9,xp:14} },
   { id:"s3", name:"The Hollow Priest's Sanctum", day:"Saturday", blurb:"One more door before it's over.",
     zones:["Choir Loft","Altar Steps","Reliquary","Crypt Stairs"],
     adj:[[1],[0,2,3],[1],[1]], start:0,
     spawns:[
-      {name:"Bone Walker", hp:10, dmg:3, rng:0, init:22, behavior:"melee", count:3, zone:1},
-      {name:"Cult Acolyte", hp:8, dmg:2, rng:2, init:30, behavior:"ranged", count:2, zone:3},
-      {name:"The Hollow Priest", hp:36, dmg:5, rng:1, init:48, behavior:"boss2", count:1, zone:2, boss:true}
-    ], reward:{gold:13,xp:18} },
+      {name:"Bone Walker", hp:13, dmg:4, rng:0, init:22, behavior:"melee", count:3, zone:1},
+      {name:"Cult Acolyte", hp:9, dmg:3, rng:2, init:30, behavior:"ranged", count:2, zone:3},
+      {name:"The Hollow Priest", hp:54, dmg:7, rng:1, init:48, behavior:"boss2", count:1, zone:2, boss:true}
+    ], treasure:[{zone:2, gold:7, xp:6}], reward:{gold:13,xp:18} },
 
   /* SUNDAY — the finale */
   { id:"su1", name:"The Last Vault", day:"Sunday", blurb:"One more door before brunch and the drive home.",
     zones:["Vault Door","Guard Hall","Treasure Vault","Inner Sanctum"],
     adj:[[1],[0,2],[1,3],[2]], start:0,
     spawns:[
-      {name:"Vault Sentinel", hp:11, dmg:4, rng:0, init:26, behavior:"melee", count:4, zone:2},
-      {name:"Arcane Wisp", hp:6, dmg:3, rng:3, init:33, behavior:"ranged", count:3, zone:3},
-      {name:"The Vaultkeeper", hp:32, dmg:6, rng:1, init:50, behavior:"boss4", count:1, zone:3, boss:true}
-    ], reward:{gold:18,xp:28} }
+      {name:"Vault Sentinel", hp:16, dmg:5, rng:0, init:26, behavior:"melee", count:5, zone:2},
+      {name:"Arcane Wisp", hp:8, dmg:4, rng:3, init:33, behavior:"ranged", count:3, zone:3},
+      {name:"The Vaultkeeper", hp:54, dmg:8, rng:1, init:50, behavior:"boss4", count:1, zone:3, boss:true}
+    ], treasure:[{zone:2, gold:10, xp:8}], reward:{gold:18,xp:28} }
 ];
 const MODDECK = [-2,-1,-1,0,0,0,0,0,1,1,1,2,"x2","miss"]; // drawn on every player attack instead of a dice roll
 
@@ -833,12 +833,14 @@ const MODDECK = [-2,-1,-1,0,0,0,0,0,1,1,1,2,"x2","miss"]; // drawn on every play
 let dungeon = loadDungeon(), dBusy = false, dSel = {a:null,b:null}, dTutStep = 0;
 function newDungeon(){ return {v:1, phase:"lobby", scenarioIndex:0, expectedCount:null, hostId:null, hostName:null, players:[], monsters:[], round:1, order:[], turnPtr:0, log:[]}; }
 const TUTORIAL = [
-  {t:"Two cards a round", b:"Every round, play two cards from your hand — one for its TOP action, one for its BOTTOM action. Everything else stays in your hand for later."},
+  {t:"Two cards, every round", b:"Each round you pick two cards from your hand — one for its TOP action, one for its BOTTOM action. You do both, top first. Next round you pick two more."},
+  {t:"Your hand runs down", b:"You start each scenario with 6 cards. Two leave your hand every round, so after three rounds you're out and have to rest to get them back."},
   {t:"Cards set turn order", b:"Whichever card you use for your top action, its number decides when you go that round. Lowest number goes first — same rule for the monsters. No dice for this part."},
-  {t:"Move around the map", b:"Every room is a zone on the map. Move to get within range of a monster to attack, an ally to heal, or the way forward."},
+  {t:"Resting gets cards back", b:"Short rest: your discards return but you lose one card for the rest of the scenario. Long rest: everything back plus heal 2, but you sit out the round."},
+  {t:"Move around the map", b:"Every room is a zone. Move to get within range of a monster to attack, an ally to heal, or the way forward."},
   {t:"Attacks draw a card, not a roll", b:"Landing a hit pulls from a small deck of modifiers instead of rolling dice — could be a miss, a critical hit, or somewhere in between."},
-  {t:"Clear the room to win", b:"Beat every monster in a scenario and the whole party earns gold and XP together, carrying into the next day."},
-  {t:"Same character, all weekend", b:"Level up and spend gold between fights. Sunday's fight is the finale — come in strong."}
+  {t:"Kill everything to win", b:"A scenario ends when every monster is down. Then the whole party earns gold and XP together, carrying into the next fight."},
+  {t:"Same character, all weekend", b:"Level up and spend gold between fights. Seven scenarios across three days — come into Sunday's finale strong."}
 ];
 function dTutorialSlide(){
   const s = TUTORIAL[dTutStep];
@@ -958,14 +960,27 @@ function dRenderMap(scn, highlight){
   let nodes="";
   scn.zones.forEach((name,z)=>{
     const c=center(z);
-    const hereM = dungeon.monsters.filter(m=>m.alive && m.zone===z);
+    const shown = dIsRevealed(z);
+    const hereM = shown ? dungeon.monsters.filter(m=>m.alive && m.zone===z) : [];
     const hereP = dungeon.players.filter(p=>p.zone===z); // includes KO'd — the map is now the single source of truth
     const isMine = mine && mine.zone===z;
     const hl = highlight[z];
-    const stroke = hl==="go" ? "var(--go)" : hl==="atk" ? "var(--sunset)" : isMine ? "var(--syrup)" : "#3A5468";
+    const stroke = hl==="go" ? "var(--go)" : hl==="atk" ? "var(--sunset)" : isMine ? "var(--syrup)" : (shown ? "#3A5468" : "#2C3E4C");
     const sw = (hl || isMine) ? 3.5 : 2;
     const clipId = "clip"+scn.id+"_"+z;
     const glow = (hl || isMine) ? `<rect x="${c.x-rw/2-5}" y="${c.y-rh/2-5}" width="${rw+10}" height="${rh+10}" rx="7" style="fill:none;stroke:${stroke};stroke-width:1.5;opacity:.35"/>` : "";
+
+    /* an unopened room shows nothing but a sealed door — you find out what's inside
+       only when someone walks in, same as opening a door in Gloomhaven */
+    if (!shown){
+      nodes += `<g>${glow}
+        <rect x="${c.x-rw/2}" y="${c.y-rh/2}" width="${rw}" height="${rh}" rx="5" style="fill:#101E28;stroke:${stroke};stroke-width:${sw};stroke-dasharray:6 4"/>
+        <text x="${c.x}" y="${c.y-2}" text-anchor="middle" style="font-size:26px;opacity:.8">🚪</text>
+        <text x="${c.x}" y="${c.y+24}" text-anchor="middle" style="font:700 10.5px Inter,sans-serif;fill:#6E8695">Unopened</text>
+      </g>`;
+      return;
+    }
+    const treasOpen = dTreasureAt(z) && !dTreasureTaken(z);
 
     /* monsters as standees, each with its own HP bar overhead — bosses get a bigger gold-ringed base */
     let monRow = "";
@@ -1017,6 +1032,7 @@ function dRenderMap(scn, highlight){
       <rect x="${c.x-rw/2}" y="${c.y-rh/2}" width="${rw}" height="18" style="fill:#0F2431;opacity:.92" clip-path="url(#${clipId})"/>
       <text x="${c.x-rw/2+9}" y="${c.y-rh/2+13.5}" style="font-size:11px">${ZONEICON[name]||"◆"}</text>
       <text x="${c.x-rw/2+25}" y="${c.y-rh/2+13.5}" style="font:700 11px Inter,sans-serif;fill:var(--sand)">${esc(name)}</text>
+      ${treasOpen?`<text x="${c.x+rw/2-14}" y="${c.y-rh/2+14}" text-anchor="middle" style="font-size:13px">💎</text>`:""}
       ${monRow}${playRow}
       ${nameLine?`<rect x="${c.x-rw/2}" y="${c.y+rh/2-15}" width="${rw}" height="15" style="fill:#0F2431;opacity:.92" clip-path="url(#${clipId})"/>
         <text x="${c.x}" y="${c.y+rh/2-4.5}" text-anchor="middle" style="font:700 9.5px Inter,sans-serif;fill:var(--go)">${esc(nameLine)}</text>`:""}
@@ -1052,7 +1068,12 @@ function dSpawn(scn, playerCount){
 
 /* ---- resolving one action (attack/move/heal/shield/taunt) for a player ---- */
 function dDoAction(scn, p, action, target){
-  if (action.a==="move"){ p.zone=target; logD(`<b>${esc(p.name)}</b> moved to ${esc(scn.zones[target])}`); }
+  if (action.a==="move"){
+    p.zone=target;
+    logD(`<b>${esc(p.name)}</b> moved to ${esc(scn.zones[target])}`);
+    dRevealZone(target);
+    dTryTakeTreasure(p, target);
+  }
   else if (action.a==="attack"){
     const val = action.val + (dLevel(p)-1) + (p.gearAtk||0);
     const m = dungeon.monsters.find(x=>x.id===target);
@@ -1123,10 +1144,47 @@ function dMonsterTurn(scn, m){
 
 /* ---- round flow ---- */
 function dAllReady(){ return dungeon.players.filter(p=>!p.ko).every(p=>p.selected && p.selected.ready); }
+/* ---- room reveal: monsters stay dormant until someone opens their room, the way
+   Gloomhaven doors work. A dormant monster doesn't move, doesn't attack, and isn't
+   in the turn order — it only wakes when a player steps into its room. ---- */
+function dIsRevealed(z){ return (dungeon.revealed||[]).indexOf(z) !== -1; }
+function dMonsterActive(m){ return m.alive && dIsRevealed(m.zone); }
+function dRevealZone(z){
+  dungeon.revealed = dungeon.revealed || [];
+  if (dungeon.revealed.indexOf(z) !== -1) return;
+  dungeon.revealed.push(z);
+  const scn = dScn();
+  const woke = dungeon.monsters.filter(m=>m.alive && m.zone===z);
+  if (woke.length){
+    const counts = {};
+    woke.forEach(m=>{ counts[m.name] = (counts[m.name]||0)+1; });
+    const list = Object.entries(counts).map(([n,c])=>c>1?`${c} ${n}s`:n).join(", ");
+    logD(`🚪 <b>${esc(scn.zones[z])}</b> opens — ${esc(list)} inside!`);
+  } else {
+    logD(`🚪 <b>${esc(scn.zones[z])}</b> opens — empty.`);
+  }
+  const treas = dTreasureAt(z);
+  if (treas && !dTreasureTaken(z)) logD(`💎 There's treasure in ${esc(scn.zones[z])}`);
+}
+/* ---- treasure: always optional. It sits off the critical path, so grabbing it
+   costs you movement, but the whole party shares the reward at scenario end. ---- */
+function dTreasureAt(z){
+  const scn = dScn();
+  return (scn.treasure||[]).find(t=>t.zone===z) || null;
+}
+function dTreasureTaken(z){ return (dungeon.treasureTaken||[]).indexOf(z) !== -1; }
+function dTryTakeTreasure(p, z){
+  const t = dTreasureAt(z);
+  if (!t || dTreasureTaken(z)) return;
+  dungeon.treasureTaken = dungeon.treasureTaken || [];
+  dungeon.treasureTaken.push(z);
+  logD(`💎 <b>${esc(p.name)}</b> grabbed the treasure — +${t.gold} gold and +${t.xp} XP for everyone`);
+}
+
 function dBuildOrder(){
   const order=[];
   dungeon.players.forEach(p=>{ if(!p.ko && p.selected && p.selected.ready && !p.selected.rest) order.push({kind:"player",id:p.id,init:p.selected.initVal}); });
-  dungeon.monsters.forEach(m=>{ if(m.alive) order.push({kind:"monster",id:m.id,init:m.init}); });
+  dungeon.monsters.forEach(m=>{ if(dMonsterActive(m)) order.push({kind:"monster",id:m.id,init:m.init}); });
   order.sort((a,b)=>a.init-b.init);
   return order;
 }
@@ -1138,13 +1196,22 @@ function dStartScenario(){
     p.maxHp = dMaxHp(p); p.hp = p.maxHp; p.zone = scn.start; p.shield=0; p.taunt=false; p.ko=false; p.selected=null; p.deck=[];
   });
   dungeon.phase="battle"; dungeon.sub="selecting"; dungeon.round=1; dungeon.order=[]; dungeon.turnPtr=0;
+  dungeon.revealed = []; dungeon.treasureTaken = [];
   logD(`<b>${esc(scn.name)}</b> begins`);
+  dRevealZone(scn.start);
 }
 function dEndScenario(won){
   const scn = DSCENARIOS[dungeon.scenarioIndex];
   if (won){
-    dungeon.players.forEach(p=>{ p.gold=(p.gold||0)+scn.reward.gold; p.xp=(p.xp||0)+scn.reward.xp; });
+    let tGold=0, tXp=0;
+    (dungeon.treasureTaken||[]).forEach(z=>{
+      const t = (scn.treasure||[]).find(x=>x.zone===z);
+      if (t){ tGold += t.gold; tXp += t.xp; }
+    });
+    dungeon.players.forEach(p=>{ p.gold=(p.gold||0)+scn.reward.gold+tGold; p.xp=(p.xp||0)+scn.reward.xp+tXp; });
     logD(`Scenario complete — everyone earns ${scn.reward.gold} gold and ${scn.reward.xp} XP`);
+    if (tGold||tXp) logD(`💎 Treasure bonus — +${tGold} gold and +${tXp} XP each`);
+    else if ((scn.treasure||[]).length) logD(`💎 You left the treasure behind`);
     dungeon.scenarioIndex++;
     dungeon.phase = dungeon.scenarioIndex>=DSCENARIOS.length ? "victory" : "lobby";
   } else {
@@ -1376,7 +1443,11 @@ function dOrderList(){
 function dRenderBattle(mine){
   const scn = dScn();
   let h = dPhaseBanner();
-  h += `<div class="panel"><h3>${esc(scn.name)}</h3><p>Round ${dungeon.round}</p></div>`;
+  const alive = dungeon.monsters.filter(m=>m.alive).length;
+  const total = dungeon.monsters.length;
+  h += `<div class="panel"><h3>${esc(scn.name)}</h3>
+    <p>Round ${dungeon.round} · <b style="color:var(--sunset)">${alive} of ${total} monsters left</b></p>
+    <p class="note" style="margin-top:4px">Clear every monster to win the scenario.</p></div>`;
   h += dRenderMap(scn);
 
   if (dungeon.sub==="selecting") h += dRenderSelecting(mine);
@@ -1401,16 +1472,25 @@ function dRenderSelecting(mine){
       <div class="acts"><button class="btn solid" data-rest="short">Short rest</button><button class="btn go" data-rest="long">Long rest</button></div></div>`;
   }
   const cards = mine.hand.map(id=>dCard(mine.cls,id));
-  return `<div class="panel"><h3>Pick two cards</h3>
-    <p>Tap one card for its <b>top</b> action, another for its <b>bottom</b> action.</p>
+  const cardA = dSel.a ? dCard(mine.cls,dSel.a) : null;
+  const cardB = dSel.b ? dCard(mine.cls,dSel.b) : null;
+  return `<div class="panel"><h3>Round ${dungeon.round} — pick two cards</h3>
+    <p>One card gives you its <b style="color:var(--sand)">top</b> action, the other its <b style="color:var(--sand)">bottom</b> action. You'll do both, in that order.</p>
+    <p class="note" style="margin-top:6px">${mine.hand.length} cards left in hand — these two go to your discard until you rest.</p>
     <div class="handgrid">${cards.map(c=>{
       const sel = dSel.a===c.id?"selA":dSel.b===c.id?"selB":"";
       return `<button class="hcard ${sel}" data-card="${c.id}">
         <div class="hn">${esc(c.n)}<span class="hi">${c.init}</span></div>
         <div class="ht">▲ ${dActText(c.top)}</div><div class="hb">▼ ${dActText(c.bot)}</div></button>`;
     }).join("")}</div>
-    ${dSel.a&&dSel.b?`<div class="acts"><button class="btn go" id="d_confirm">Confirm — play these two</button></div>`:
-      `<p class="note">${!dSel.a?"Tap a card for TOP.":"Now tap a different card for BOTTOM."}</p>`}
+    ${cardA&&cardB?`<div class="drawn" style="margin-top:12px">
+        <p class="kind">This round you'll do</p>
+        <h4 style="margin:6px 0 2px">1. ${dActText(cardA.top)}<span style="color:var(--kelp);font-weight:400;font-size:13px"> — top of ${esc(cardA.n)}</span></h4>
+        <h4 style="margin:2px 0 0">2. ${dActText(cardB.bot)}<span style="color:var(--kelp);font-weight:400;font-size:13px"> — bottom of ${esc(cardB.n)}</span></h4>
+        <p style="margin-top:8px">You act on initiative <b style="color:var(--syrup)">${cardA.init}</b> (lower goes first).</p>
+      </div>
+      <div class="acts"><button class="btn go" id="d_confirm">Lock in these two</button></div>`:
+      `<p class="note">${!dSel.a?"Tap a card to use its TOP action.":"Now tap a different card to use its BOTTOM action."}</p>`}
   </div>`;
 }
 function dActText(a){
@@ -1436,11 +1516,21 @@ function dRenderMyTurn(p, scn){
   const step = p._step || "top";
   const cardA = dCard(p.cls, p.selected.a), cardB = dCard(p.cls, p.selected.b);
   const action = step==="top" ? cardA.top : cardB.bot;
-  let h = `<div class="turnbanner"><h2>Your turn</h2><p class="who">${step==="top"?"Top":"Bottom"} action — ${dActText(action)}</p></div>`;
+  const fromCard = step==="top" ? cardA : cardB;
+  const otherCard = step==="top" ? cardB : cardA;
+  const otherAction = step==="top" ? cardB.bot : cardA.top;
+  let h = `<div class="turnbanner"><h2>Your turn</h2>
+    <p class="who">Action ${step==="top"?"1":"2"} of 2 — ${dActText(action)}</p>
+    <p class="who" style="font-size:12.5px;margin-top:6px;opacity:.85">
+      from the <b style="color:var(--syrup)">${step==="top"?"top":"bottom"}</b> of <b style="color:var(--sand)">${esc(fromCard.n)}</b>
+    </p>
+    <p class="who" style="font-size:12px;margin-top:4px;opacity:.7">
+      ${step==="top" ? `Next: ${dActText(otherAction)} from ${esc(otherCard.n)}` : `Last action this round`}
+    </p></div>`;
 
   const highlight = {};
   if (action.a==="move") dReachable(scn,p.zone,action.val).forEach(z=>highlight[z]="go");
-  else if (action.a==="attack") dungeon.monsters.filter(m=>m.alive && dDist(scn,p.zone,m.zone)<=action.rng).forEach(m=>highlight[m.zone]="atk");
+  else if (action.a==="attack") dungeon.monsters.filter(m=>dMonsterActive(m) && dDist(scn,p.zone,m.zone)<=action.rng).forEach(m=>highlight[m.zone]="atk");
   else if (action.a==="heal") dungeon.players.filter(pl=>dDist(scn,p.zone,pl.zone)<=action.rng).forEach(pl=>highlight[pl.zone]="go");
   h += dRenderMap(scn, highlight);
 
@@ -1452,7 +1542,7 @@ function dRenderMyTurn(p, scn){
     dReachable(scn,p.zone,action.val).forEach(z => h += `<button data-act="move|${z}">${esc(scn.zones[z])}<span class="chev">›</span></button>`);
     if (!dReachable(scn,p.zone,action.val).length) h += `<button data-act="move|${p.zone}">Nowhere to go — skip<span class="chev">›</span></button>`;
   } else if (action.a==="attack"){
-    const inRange = dungeon.monsters.filter(m=>m.alive && dDist(scn,p.zone,m.zone)<=action.rng);
+    const inRange = dungeon.monsters.filter(m=>dMonsterActive(m) && dDist(scn,p.zone,m.zone)<=action.rng);
     if (!inRange.length) h += `<button class="atk" data-act="skip">Nothing in range — skip<span class="chev">›</span></button>`;
     inRange.forEach(m => h += `<button class="atk" data-act="attack|${m.id}">${esc(m.name)} (${m.hp}/${m.maxHp} HP, ${esc(scn.zones[m.zone])})<span class="chev">›</span></button>`);
   } else if (action.a==="heal"){
@@ -1629,9 +1719,13 @@ document.addEventListener("click", e=>{
 });
 function dWrapRound(){
   dungeon.round++;
-  dungeon.players.forEach(p=>{ p.shield=0; p.taunt=false; });
+  dungeon.players.forEach(p=>{
+    p.shield=0; p.taunt=false;
+    p.selected=null;   // fresh pick every round — without this everyone replays the same two cards forever
+    p._step=null;
+  });
   dungeon.sub="selecting"; dungeon.order=[]; dungeon.turnPtr=0;
-  logD(`Round ${dungeon.round} begins`);
+  logD(`Round ${dungeon.round} begins — pick two new cards`);
 }
 
 /* ---- monster turns resolve themselves — nobody has to notice and tap a button.
