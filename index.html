@@ -1308,9 +1308,10 @@ function dSyncStatus(){
     <p class="note" style="margin-top:8px">If this keeps failing, screenshot this box — the status and error tell us exactly what's wrong.</p></div>`;
 }
 function dResetPanel(){
-  const canReset = dIAmHost();
-  if (!canReset) return "";
+  /* TEMP: opened to everyone while sorting out a stuck Firebase state —
+     ask Claude to lock this back to host-only before sending the app out for real. */
   return `<div class="panel"><h3>Reset</h3><p>Wipes every character, the host claim, and progress — good for testing today before the trip.</p>
+    <p class="note" style="color:var(--sunset);margin-top:4px">⚠️ Temporarily open to anyone — this will be locked to the host again before launch.</p>
     <div class="acts"><button class="btn warn" id="d_resetall">Reset the Gauntlet</button></div></div>`;
 }
 /* Host is exclusive at the SERVER level, not just hidden in the UI. We read the
@@ -1674,7 +1675,7 @@ document.addEventListener("click", e=>{
     toast("Reconnecting…"); render(); initSync(); return;
   }
   if (t.id==="d_resetall"){
-    if (!dIAmHost()){ toast("Only "+(dungeon.hostName||"the host")+" can reset this"); return; }
+    /* TEMP: no host check while sorting out a stuck Firebase state — see dResetPanel note */
     if (confirm("Reset the whole Gauntlet — everyone's characters, progress, and the host claim? This can't be undone.")){
       dungeon = newDungeon(); saveDungeon(); render(); toast("Gauntlet reset");
     }
