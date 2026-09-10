@@ -1130,6 +1130,32 @@ function dResetPanel(){
   return `<div class="panel"><h3>Reset</h3><p>Wipes every character, the host claim, and progress — good for testing today before the trip.</p>
     <div class="acts"><button class="btn warn" id="d_resetall">Reset the Gauntlet</button></div></div>`;
 }
+/* checks the ACTUAL current server state before claiming host, not just the
+   local copy — a device that's stale or briefly disconnected shouldn't be able
+   to silently create a second "host" that conflicts with the real one. */
+function dClaimHostSafely(nm, isReclaim){
+  const commit = ()=>{
+    dungeon.hostId=me.id; dungeon.hostName=nm; me.name=nm; saveMe();
+    saveDungeon(); render(); toast(isReclaim?"You're the host now":"You're the host");
+  };
+  if (!syncOn || !dRef){ commit(); return; } // genuinely local-only play — nothing to conflict with
+  toast("Checking…");
+  dRef.child("hostId").once("value")
+    .then(snap=>{
+      const serverHost = snap.val();
+      if (serverHost && serverHost!==me.id){
+        if (isReclaim){
+          if (confirm(`${dungeon.hostName||"Someone"} already has host on the server. Take over anyway?`)) commit();
+        } else {
+          toast("Someone's already host — pull to refresh and check who");
+          render();
+        }
+        return;
+      }
+      commit();
+    })
+    .catch(()=>toast("Couldn't confirm — check your connection and try again"));
+}
 function dHostPanel(){
   const host = dungeon.hostId;
   if (!host) return `<div class="panel"><h3>Who's running this?</h3>
@@ -1357,15 +1383,14 @@ document.addEventListener("click", e=>{
   if (t.id==="d_claimhost"){
     const nm = ($("d_name") && $("d_name").value.trim()) || prompt("Your name, for the host label:", me.name||"");
     if (!nm) return;
-    dungeon.hostId=me.id; dungeon.hostName=nm; me.name=nm; saveMe();
-    saveDungeon(); render(); toast("You're the host"); return;
+    dClaimHostSafely(nm, false);
+    return;
   }
   if (t.id==="d_reclaimhost"){
     const nm = prompt("Your name, for the host label:", me.name||"");
     if (!nm) return;
-    if (dungeon.hostId && !confirm(`Replace ${dungeon.hostName||"the current host"} as host?`)) return;
-    dungeon.hostId=me.id; dungeon.hostName=nm; me.name=nm; saveMe();
-    saveDungeon(); render(); toast("You're the host now"); return;
+    dClaimHostSafely(nm, true);
+    return;
   }
   if (t.id==="d_setcount"){
     const n = +(($("d_count")&&$("d_count").value)||0);
@@ -1719,6 +1744,12 @@ function renderMvp(){
 function renderShanty(){
   return `<div class="panel"><h3>⚓ Matty-O</h3>
     <p>A shanty for the crew — learn it before Friday. One guy leads, everybody roars back the bold line.</p></div>
+  <div class="panel"><h3>🥁 Finding the beat</h3>
+    <p>It's a shouted chant, not a sung melody — don't worry about hitting notes.</p>
+    <p style="margin-top:10px"><b style="color:var(--sand)">No gap.</b> The group jumps in the instant the leader stops — like finishing his sentence, not waiting for a cue.</p>
+    <p style="margin-top:10px"><b style="color:var(--sand)">Four strong beats a line</b> — stomp or clap on the caps:</p>
+    <p style="color:var(--syrup);font-weight:700;font-size:15px;margin-top:6px;line-height:1.5">Oh we <u>SAILED</u> our <u>CREW</u> to San Di-<u>E</u>-go <u>TOWN</u></p>
+    <p style="margin-top:10px"><b style="color:var(--sand)">Reference tempo:</b> same bouncy pace as "What Shall We Do with a Drunken Sailor" — brisk, not rushed, like pounding a table, not racing through it.</p></div>
   <div class="panel"><div class="shanty">
       <p class="lead"><b>Leader</b> — Oh we sailed our crew to San Diego town,</p>
       <p class="resp">Way, hay, Matty-o!</p>
