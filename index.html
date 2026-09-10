@@ -671,37 +671,76 @@ const DCLASS_STYLE = {
   shadowstep:{icon:"🗡️", color:"#9B7FD4"},
   warden:    {icon:"✨", color:"#3FA98A"}
 };
-const MONICON = {"Cellar Rat":"🐀","The Keg Warden":"🛢️","Bone Walker":"💀","Cult Chanter":"🕯️",
+const MONICON = {"Cellar Rat":"🐀","Barrel Roller":"🛢️","The Keg Warden":"🛢️","Bone Walker":"💀","Cult Acolyte":"🕯️",
   "The Hollow Priest":"👻","Vault Sentinel":"🗿","Arcane Wisp":"🔮","The Vaultkeeper":"👑"};
 const ZONEICON = {"Stairwell":"🪜","Wine Racks":"🍷","Keg Room":"🛢️","Back Corner":"📦",
-  "Chapel Doors":"🚪","Pews":"⛪","Altar Steps":"🕯️","Bell Tower":"🔔","Crypt Stairs":"⚰️",
+  "Cellar Stairs":"🪜","Barrel Row":"🛢️","Sump Pit":"💧","Old Boiler":"🔥",
+  "Boiler Passage":"🔥","Fermenting Room":"🍺","Warden's Vault":"🔒","Cellar's End":"📦",
+  "Outer Steps":"🪜","Chapel Doors":"🚪","Nave":"⛪","Side Chapel":"🕯️",
+  "Spiral Stair":"🌀","Choir Loft":"🎼","Bell Chamber":"🔔","Belfry Roof":"🔔",
+  "Altar Steps":"🕯️","Reliquary":"💎","Crypt Stairs":"⚰️",
   "Vault Door":"🚪","Guard Hall":"🛡️","Treasure Vault":"💰","Inner Sanctum":"👑"};
 
-/* ---- the 3-scenario campaign, one tied to each day ---- */
+/* ---- the 7-scenario campaign — a queue, not a calendar. The host advances whenever
+   the group's ready; nothing ties a scenario to a specific day. Two 3-part arcs
+   (the cellar, the chapel) plus Sunday's single finale. ---- */
 const DSCENARIOS = [
-  { id:"s1", name:"The Cellar Crawl", day:"Friday night", blurb:"Something's been living under the HQ.",
+  /* FRIDAY — under the HQ, three-part descent */
+  { id:"f1", name:"The Cellar Door", day:"Friday night", blurb:"Something's skittering under the HQ.",
     zones:["Stairwell","Wine Racks","Keg Room","Back Corner"],
     adj:[[1],[0,2],[1,3],[2]], start:0,
     spawns:[
-      {name:"Cellar Rat",     hp:6,  dmg:2, rng:0, init:25, behavior:"melee",  count:2, zone:2},
-      {name:"The Keg Warden", hp:14, dmg:4, rng:0, init:45, behavior:"boss1",  count:1, zone:3, boss:true}
-    ], reward:{gold:8,xp:15} },
-  { id:"s2", name:"The Sunken Chapel", day:"Saturday", blurb:"Nobody's used this chapel in years. Something has.",
-    zones:["Chapel Doors","Pews","Altar Steps","Bell Tower","Crypt Stairs"],
+      {name:"Cellar Rat", hp:6, dmg:2, rng:0, init:25, behavior:"melee", count:4, zone:2}
+    ], reward:{gold:6,xp:10} },
+  { id:"f2", name:"The Wine Cellar", day:"Friday night", blurb:"The rats came from somewhere deeper.",
+    zones:["Cellar Stairs","Barrel Row","Wine Racks","Sump Pit","Old Boiler"],
+    adj:[[1],[0,2,3],[1],[1,4],[3]], start:0,
+    spawns:[
+      {name:"Cellar Rat", hp:6, dmg:2, rng:0, init:25, behavior:"melee", count:3, zone:2},
+      {name:"Barrel Roller", hp:9, dmg:3, rng:0, init:20, behavior:"melee", count:3, zone:4}
+    ], reward:{gold:9,xp:14} },
+  { id:"f3", name:"The Keg Warden's Den", day:"Friday night", blurb:"Whatever's been directing them is close now.",
+    zones:["Boiler Passage","Fermenting Room","Warden's Vault","Cellar's End"],
+    adj:[[1,3],[0,2],[1,3],[2,0]], start:0,
+    spawns:[
+      {name:"Barrel Roller", hp:9, dmg:3, rng:0, init:20, behavior:"melee", count:2, zone:2},
+      {name:"Cellar Rat", hp:6, dmg:2, rng:0, init:25, behavior:"melee", count:2, zone:2},
+      {name:"The Keg Warden", hp:20, dmg:4, rng:0, init:45, behavior:"boss1", count:1, zone:2, boss:true}
+    ], reward:{gold:11,xp:16} },
+
+  /* SATURDAY — the sunken chapel, three-part ascent */
+  { id:"s1", name:"The Chapel Steps", day:"Saturday", blurb:"Nobody's used this chapel in years.",
+    zones:["Outer Steps","Chapel Doors","Nave","Side Chapel"],
+    adj:[[1],[0,2],[1,3],[2]], start:0,
+    spawns:[
+      {name:"Bone Walker", hp:12, dmg:3, rng:0, init:22, behavior:"melee", count:3, zone:2},
+      {name:"Cult Acolyte", hp:8, dmg:2, rng:2, init:30, behavior:"ranged", count:2, zone:3}
+    ], reward:{gold:9,xp:14} },
+  { id:"s2", name:"The Bell Tower", day:"Saturday", blurb:"Something's been ringing that bell.",
+    zones:["Nave","Spiral Stair","Choir Loft","Bell Chamber","Belfry Roof"],
     adj:[[1],[0,2],[1,3,4],[2],[2]], start:0,
     spawns:[
-      {name:"Bone Walker",       hp:8,  dmg:3, rng:0, init:22, behavior:"melee",  count:3, zone:2},
-      {name:"Cult Chanter",      hp:6,  dmg:2, rng:2, init:30, behavior:"ranged", count:2, zone:3},
-      {name:"The Hollow Priest", hp:20, dmg:5, rng:1, init:48, behavior:"boss2",  count:1, zone:4, boss:true}
-    ], reward:{gold:12,xp:22} },
-  { id:"s3", name:"The Last Vault", day:"Sunday", blurb:"One more door before brunch and the drive home.",
+      {name:"Cult Acolyte", hp:8, dmg:2, rng:2, init:30, behavior:"ranged", count:4, zone:3},
+      {name:"Bone Walker", hp:10, dmg:3, rng:0, init:22, behavior:"melee", count:3, zone:4}
+    ], reward:{gold:9,xp:14} },
+  { id:"s3", name:"The Hollow Priest's Sanctum", day:"Saturday", blurb:"One more door before it's over.",
+    zones:["Choir Loft","Altar Steps","Reliquary","Crypt Stairs"],
+    adj:[[1],[0,2,3],[1],[1]], start:0,
+    spawns:[
+      {name:"Bone Walker", hp:10, dmg:3, rng:0, init:22, behavior:"melee", count:3, zone:1},
+      {name:"Cult Acolyte", hp:8, dmg:2, rng:2, init:30, behavior:"ranged", count:2, zone:3},
+      {name:"The Hollow Priest", hp:36, dmg:5, rng:1, init:48, behavior:"boss2", count:1, zone:2, boss:true}
+    ], reward:{gold:13,xp:18} },
+
+  /* SUNDAY — the finale */
+  { id:"su1", name:"The Last Vault", day:"Sunday", blurb:"One more door before brunch and the drive home.",
     zones:["Vault Door","Guard Hall","Treasure Vault","Inner Sanctum"],
     adj:[[1],[0,2],[1,3],[2]], start:0,
     spawns:[
-      {name:"Vault Sentinel",  hp:10, dmg:4, rng:0, init:26, behavior:"melee",  count:3, zone:2},
-      {name:"Arcane Wisp",     hp:5,  dmg:3, rng:3, init:33, behavior:"ranged", count:2, zone:3},
-      {name:"The Vaultkeeper", hp:26, dmg:6, rng:1, init:50, behavior:"boss3",  count:1, zone:3, boss:true}
-    ], reward:{gold:16,xp:30} }
+      {name:"Vault Sentinel", hp:11, dmg:4, rng:0, init:26, behavior:"melee", count:4, zone:2},
+      {name:"Arcane Wisp", hp:6, dmg:3, rng:3, init:33, behavior:"ranged", count:3, zone:3},
+      {name:"The Vaultkeeper", hp:32, dmg:6, rng:1, init:50, behavior:"boss4", count:1, zone:3, boss:true}
+    ], reward:{gold:18,xp:28} }
 ];
 const MODDECK = [-2,-1,-1,0,0,0,0,0,1,1,1,2,"x2","miss"]; // drawn on every player attack instead of a dice roll
 
@@ -782,88 +821,114 @@ function dLayoutZones(scn){
   Object.keys(cols).forEach(d=>cols[d].forEach((z,i)=>{ pos[z]={col:+d, row:i, rowsInCol:cols[d].length}; }));
   return pos;
 }
+/* hex floor as one reusable <pattern> rather than hundreds of individual polygons —
+   same honeycomb look, but the browser paints one tile instead of ~540 DOM nodes,
+   which matters because the map re-renders on every action. */
+function hexPatternDef(){
+  const r=11, w=r*3, h=r*Math.sqrt(3);
+  const hex = (cx,cy)=>{
+    let p=[]; for(let i=0;i<6;i++){ const a=Math.PI/180*(60*i); p.push((cx+r*Math.cos(a)).toFixed(2)+","+(cy+r*Math.sin(a)).toFixed(2)); }
+    return `<polygon points="${p.join(" ")}" style="fill:none;stroke:#33546B;stroke-width:.7;opacity:.5"/>`;
+  };
+  return `<pattern id="hexfloor" width="${w.toFixed(2)}" height="${h.toFixed(2)}" patternUnits="userSpaceOnUse">
+    ${hex(0,0)}${hex(0,h)}${hex(r*1.5,h/2)}${hex(w,0)}${hex(w,h)}
+  </pattern>`;
+}
+
 function dRenderMap(scn, highlight){
   highlight = highlight || {};
   const pos = dLayoutZones(scn);
-  const colW=152, rowH=112, pad=22, topPad=8;
+  const colW=168, rowH=126, pad=24, topPad=10;
   const maxCol = Math.max(...Object.values(pos).map(p=>p.col));
   const maxRows = Math.max(...Object.values(pos).map(p=>p.rowsInCol));
   const w = pad*2 + (maxCol+1)*colW, h = pad*2 + topPad + maxRows*rowH;
   const center = z => { const p=pos[z]; const x=pad+p.col*colW+colW/2;
     const totalH=p.rowsInCol*rowH; const y=topPad+(h-topPad-totalH)/2+rowH/2+p.row*rowH; return {x,y}; };
+  const rw=142, rh=104;
 
-  /* corridors — a thick base line with a visible dotted trail down the middle */
+  /* corridors — stone passage with a door plate at the midpoint */
   const seenEdge=new Set(); let edges="";
   scn.zones.forEach((_,z)=>scn.adj[z].forEach(nb=>{
     const key=[z,nb].sort((a,b)=>a-b).join("-"); if(seenEdge.has(key)) return; seenEdge.add(key);
     const a=center(z), b=center(nb);
-    edges += `<line x1="${a.x}" y1="${a.y}" x2="${b.x}" y2="${b.y}" style="stroke:var(--ink-line);stroke-width:7;stroke-linecap:round"/>`;
-    const dx=b.x-a.x, dy=b.y-a.y, dist=Math.hypot(dx,dy), steps=Math.max(2,Math.round(dist/16));
-    for(let i=1;i<steps;i++){ const t=i/steps; edges += `<circle cx="${a.x+dx*t}" cy="${a.y+dy*t}" r="2.1" style="fill:var(--syrup);opacity:.8"/>`; }
+    const mx=(a.x+b.x)/2, my=(a.y+b.y)/2;
+    const ang = Math.atan2(b.y-a.y, b.x-a.x)*180/Math.PI;
+    edges += `<line x1="${a.x}" y1="${a.y}" x2="${b.x}" y2="${b.y}" style="stroke:#243B4A;stroke-width:15;stroke-linecap:butt"/>
+      <line x1="${a.x}" y1="${a.y}" x2="${b.x}" y2="${b.y}" style="stroke:#16293544;stroke-width:11;stroke-linecap:butt"/>
+      <g transform="translate(${mx},${my}) rotate(${ang})">
+        <rect x="-4.5" y="-9" width="9" height="18" rx="1.5" style="fill:#7A5B33;stroke:var(--syrup);stroke-width:1.4"/>
+        <circle cx="0" cy="0" r="1.5" style="fill:var(--syrup)"/>
+      </g>`;
   }));
 
   const mine = myDP();
-  const cornerTicks = (cx,cy,rw,rh) => {
-    const L=10, x0=cx-rw/2, x1=cx+rw/2, y0=cy-rh/2, y1=cy+rh/2;
-    const c = (x,y,dx,dy)=>`<path d="M${x} ${y+dy*L} L${x} ${y} L${x+dx*L} ${y}" style="stroke:var(--syrup);stroke-width:2;opacity:.6;fill:none"/>`;
-    return c(x0,y0,1,1)+c(x1,y0,-1,1)+c(x0,y1,1,-1)+c(x1,y1,-1,-1);
-  };
-
   let nodes="";
   scn.zones.forEach((name,z)=>{
-    const c=center(z), rw=134, rh=98;
+    const c=center(z);
     const hereM = dungeon.monsters.filter(m=>m.alive && m.zone===z);
     const hereP = dungeon.players.filter(p=>!p.ko && p.zone===z);
     const isMine = mine && mine.zone===z;
     const hl = highlight[z];
-    const stroke = hl==="go" ? "var(--go)" : hl==="atk" ? "var(--sunset)" : isMine ? "var(--syrup)" : "var(--ink-line)";
-    const sw = (hl || isMine) ? 3.5 : 1.5;
-    const glow = (hl || isMine) ? `<rect x="${c.x-rw/2-4}" y="${c.y-rh/2-4}" width="${rw+8}" height="${rh+8}" rx="13" style="fill:none;stroke:${stroke};stroke-width:1.5;opacity:.35"/>` : "";
+    const stroke = hl==="go" ? "var(--go)" : hl==="atk" ? "var(--sunset)" : isMine ? "var(--syrup)" : "#3A5468";
+    const sw = (hl || isMine) ? 3.5 : 2;
+    const clipId = "clip"+scn.id+"_"+z;
+    const glow = (hl || isMine) ? `<rect x="${c.x-rw/2-5}" y="${c.y-rh/2-5}" width="${rw+10}" height="${rh+10}" rx="7" style="fill:none;stroke:${stroke};stroke-width:1.5;opacity:.35"/>` : "";
 
+    /* monsters as standees — bosses get a bigger gold-ringed base */
     let monRow = "";
     if (hereM.length){
       const shown = hereM.slice(0,4);
       shown.forEach((m,i)=>{
-        const mx = c.x - ((shown.length-1)*20)/2 + i*20;
-        monRow += `<circle cx="${mx}" cy="${c.y+8}" r="11" style="fill:#3a1f1a;stroke:var(--sunset);stroke-width:1.2"/>
-          <text x="${mx}" y="${c.y+13}" text-anchor="middle" style="font-size:13px">${monIconOf(m.name)}</text>`;
+        const mx = c.x - ((shown.length-1)*24)/2 + i*24;
+        const my = c.y+2;
+        const r = m.boss ? 14 : 11.5;
+        const ring = m.boss ? "var(--syrup)" : "var(--sunset)";
+        const rw2 = m.boss ? 2.4 : 1.6;
+        monRow += `<ellipse cx="${mx}" cy="${my+r}" rx="${r-1}" ry="3.5" style="fill:#00000055"/>
+          <circle cx="${mx}" cy="${my}" r="${r}" style="fill:#4A2019;stroke:${ring};stroke-width:${rw2}"/>
+          <text x="${mx}" y="${my+5}" text-anchor="middle" style="font-size:${m.boss?16:13}px">${monIconOf(m.name)}</text>`;
       });
-      if (hereM.length>4) monRow += `<text x="${c.x+52}" y="${c.y+13}" text-anchor="middle" style="font:700 10px Inter,sans-serif;fill:var(--sunset)">+${hereM.length-4}</text>`;
+      if (hereM.length>4) monRow += `<text x="${c.x+56}" y="${c.y+7}" text-anchor="middle" style="font:700 10px Inter,sans-serif;fill:var(--sunset)">+${hereM.length-4}</text>`;
     }
+    /* players as class-colored standees, names on a plate underneath */
     let playRow = "", nameLine = "";
     if (hereP.length){
       const shown = hereP.slice(0,4);
       shown.forEach((p,i)=>{
         const st = DCLASS_STYLE[p.cls];
-        const px = c.x - ((shown.length-1)*21)/2 + i*21;
-        playRow += `<circle cx="${px}" cy="${c.y+33}" r="10.5" style="fill:${st.color}"/>
-          <text x="${px}" y="${c.y+37}" text-anchor="middle" style="font-size:11px">${st.icon}</text>`;
+        const px = c.x - ((shown.length-1)*24)/2 + i*24;
+        const py = c.y+30;
+        playRow += `<ellipse cx="${px}" cy="${py+10}" rx="10" ry="3.5" style="fill:#00000055"/>
+          <circle cx="${px}" cy="${py}" r="11" style="fill:${st.color};stroke:#0A161E;stroke-width:1.6"/>
+          <text x="${px}" y="${py+4}" text-anchor="middle" style="font-size:11px">${st.icon}</text>`;
       });
       nameLine = hereP.map(p=>esc(p.name.slice(0,4))).join(" · ");
       if (nameLine.length>22) nameLine = nameLine.slice(0,20)+"…";
     }
 
     nodes += `<g>${glow}
-      <rect x="${c.x-rw/2}" y="${c.y-rh/2}" width="${rw}" height="${rh}" rx="11" style="fill:var(--ink-deep);stroke:${stroke};stroke-width:${sw}"/>
-      <rect x="${c.x-rw/2+4}" y="${c.y-rh/2+4}" width="${rw-8}" height="${rh-8}" rx="8" style="fill:none;stroke:var(--ink-line);stroke-width:1;opacity:.5"/>
-      ${cornerTicks(c.x,c.y,rw,rh)}
-      <text x="${c.x}" y="${c.y-rh/2+22}" text-anchor="middle" style="font-size:16px">${ZONEICON[name]||"◆"}</text>
-      <text x="${c.x}" y="${c.y-rh/2+38}" text-anchor="middle" style="font:700 12px Inter,sans-serif;fill:var(--sand)">${esc(name)}</text>
+      <defs><clipPath id="${clipId}"><rect x="${c.x-rw/2}" y="${c.y-rh/2}" width="${rw}" height="${rh}" rx="5"/></clipPath></defs>
+      <rect x="${c.x-rw/2}" y="${c.y-rh/2}" width="${rw}" height="${rh}" rx="5" style="fill:#1B3140;stroke:${stroke};stroke-width:${sw}"/>
+      <rect x="${c.x-rw/2}" y="${c.y-rh/2}" width="${rw}" height="${rh}" rx="5" style="fill:url(#hexfloor)"/>
+      <rect x="${c.x-rw/2}" y="${c.y-rh/2}" width="${rw}" height="18" style="fill:#0F2431;opacity:.92" clip-path="url(#${clipId})"/>
+      <text x="${c.x-rw/2+9}" y="${c.y-rh/2+13.5}" style="font-size:11px">${ZONEICON[name]||"◆"}</text>
+      <text x="${c.x-rw/2+25}" y="${c.y-rh/2+13.5}" style="font:700 11px Inter,sans-serif;fill:var(--sand)">${esc(name)}</text>
       ${monRow}${playRow}
-      ${nameLine?`<text x="${c.x}" y="${c.y+rh/2-7}" text-anchor="middle" style="font:700 10.5px Inter,sans-serif;fill:var(--go)">${esc(nameLine)}</text>`:""}
+      ${nameLine?`<rect x="${c.x-rw/2}" y="${c.y+rh/2-15}" width="${rw}" height="15" style="fill:#0F2431;opacity:.92" clip-path="url(#${clipId})"/>
+        <text x="${c.x}" y="${c.y+rh/2-4.5}" text-anchor="middle" style="font:700 10px Inter,sans-serif;fill:var(--go)">${esc(nameLine)}</text>`:""}
     </g>`;
   });
 
   return `<div class="panel"><h3>🗺 Map</h3>
     <div style="overflow-x:auto;-webkit-overflow-scrolling:touch;border-radius:8px">
     <svg width="${w}" height="${h}" viewBox="0 0 ${w} ${h}" style="display:block" xmlns="http://www.w3.org/2000/svg">
-      <defs><radialGradient id="dgmap" cx="50%" cy="35%" r="80%">
-        <stop offset="0%" stop-color="#173241"/><stop offset="100%" stop-color="#0A161E"/>
-      </radialGradient></defs>
+      <defs><radialGradient id="dgmap" cx="50%" cy="35%" r="82%">
+        <stop offset="0%" stop-color="#142936"/><stop offset="100%" stop-color="#080F15"/>
+      </radialGradient>${hexPatternDef()}</defs>
       <rect x="0" y="0" width="${w}" height="${h}" rx="10" style="fill:url(#dgmap)"/>
       ${edges}${nodes}
     </svg></div>
-    <p class="note">Your zone glows amber${Object.keys(highlight).length?" — lit-up rooms are your options right now.":"."}${maxCol>2?" Swipe to see the rest of the map.":""}</p></div>`;
+    <p class="note">Your room glows amber${Object.keys(highlight).length?" — lit-up rooms are your options right now.":"."}${maxCol>2?" Swipe to see the rest of the map.":""}</p></div>`;
 }
 function monIconOf(name){ return MONICON[name] || "👹"; }
 
@@ -932,6 +997,23 @@ function dMonsterTurn(scn, m){
     if(!inRange.length){ logD(`${esc(m.name)} waits`); return; }
     if (m._t%3===0){ dShuffle(inRange.slice()).slice(0,2).forEach(v=>dMonsterHit(m,v)); logD(`${esc(m.name)} unleashes a sweeping strike`); }
     else dMonsterHit(m, inRange[Math.floor(Math.random()*inRange.length)]);
+  } else if (m.behavior==="boss4"){
+    const enraged = m.hp <= m.maxHp*0.4;
+    const inRange = alive.filter(p=>dDist(scn,m.zone,p.zone)<=m.rng);
+    if (!inRange.length){
+      let best=null,bestD=Infinity;
+      alive.forEach(p=>{ const d=dDist(scn,m.zone,p.zone); if(d<bestD){bestD=d;best=p;} });
+      if (best && bestD>0) m.zone = dNextHop(scn, m.zone, best.zone);
+      logD(`${esc(m.name)} closes in`);
+      return;
+    }
+    if (enraged) logD(`${esc(m.name)} is enraged!`);
+    const hits = enraged ? 2 : 1;
+    for (let i=0;i<hits;i++){
+      const stillInRange = dungeon.players.filter(p=>!p.ko && dDist(scn,m.zone,p.zone)<=m.rng);
+      if (!stillInRange.length) break;
+      dMonsterHit(m, stillInRange.reduce((a,b)=>a.hp<b.hp?a:b));
+    }
   }
 }
 
