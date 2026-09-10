@@ -163,6 +163,14 @@ label{display:block;color:var(--kelp);font-size:12.5px;margin-top:12px}
 .turnbanner h2{font-family:Anton,Impact,sans-serif;font-size:23px;text-transform:uppercase;letter-spacing:.01em}
 .targetlist button{display:block;width:100%;text-align:left;border:1px solid var(--ink-line);border-radius:var(--r);padding:11px 13px;margin-top:8px;font-size:14px;background:var(--ink-deep)}
 
+/* ---------- weather ---------- */
+.wxrow{display:flex;gap:10px;margin-top:10px}
+.wxday{flex:1;text-align:center;background:var(--ink-deep);border:1px solid var(--ink-line);border-radius:var(--r);padding:11px 6px}
+.wxd{color:var(--kelp);font-size:12px;font-weight:600;margin:0}
+.wxi{font-size:23px;margin:5px 0}
+.wxt{font-size:14px;font-weight:700;color:var(--sand);margin:0}
+.wxt span{color:var(--kelp);font-weight:400;font-size:12px}
+
 .editbar{position:sticky;bottom:0;z-index:45;background:rgba(10,22,30,.95);backdrop-filter:blur(10px);
          border-top:1px solid var(--ink-line);padding:10px 16px calc(10px + env(safe-area-inset-bottom))}
 .editbar .in{max-width:640px;margin:0 auto;display:flex;gap:10px;align-items:center}
@@ -288,7 +296,7 @@ const PUBLISHED = {
 /* ---------- storage that never breaks the app ---------- */
 const store = (()=>{ try{ const k="__t"; localStorage.setItem(k,"1"); localStorage.removeItem(k); return localStorage; }
   catch(e){ const m={}; return { getItem:k=>(k in m?m[k]:null), setItem:(k,v)=>{m[k]=String(v)}, removeItem:k=>{delete m[k]} }; } })();
-const PKEY="azsd.plan", GKEY="azsd.game", MKEY="azsd.me";
+const PKEY="azsd.plan", GKEY="azsd.game", MKEY="azsd.me", WKEY="azsd.weather";
 
 const $ = id => document.getElementById(id);
 const esc = s => String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
@@ -1280,11 +1288,58 @@ function renderJoin(){
 }
 
 /* ---------- kit tab ---------- */
+/* ---------- weather ---------- */
+let weather = loadWeather();
+function loadWeather(){ try{ const r=store.getItem(WKEY); if(r) return JSON.parse(r); }catch(e){} return null; }
+function saveWeather(){ try{ store.setItem(WKEY, JSON.stringify(weather)); }catch(e){} }
+const WCODE = {0:"☀️",1:"🌤️",2:"⛅",3:"☁️",45:"🌫️",48:"🌫️",51:"🌦️",53:"🌦️",55:"🌦️",61:"🌧️",63:"🌧️",65:"🌧️",80:"🌦️",81:"🌦️",82:"🌧️",95:"⛈️"};
+function wIcon(code){ return WCODE[code] || "🌡️"; }
+async function fetchWeather(){
+  try{
+    const url = "https://api.open-meteo.com/v1/forecast?" + new URLSearchParams({
+      latitude:"32.7157", longitude:"-117.1611",
+      daily:"weathercode,temperature_2m_max,temperature_2m_min",
+      timezone:"America/Los_Angeles", start_date:"2026-09-11", end_date:"2026-09-13",
+      temperature_unit:"fahrenheit"
+    }).toString();
+    const res = await fetch(url);
+    if (!res.ok) throw new Error("bad response");
+    const data = await res.json();
+    const days = data.daily.time.map((d,i)=>({
+      date:d, hi:Math.round(data.daily.temperature_2m_max[i]), lo:Math.round(data.daily.temperature_2m_min[i]), code:data.daily.weathercode[i]
+    }));
+    weather = { fetchedAt: Date.now(), days };
+    saveWeather();
+    if (view==="kit") render();
+  } catch(e){ /* keep whatever's cached (or nothing) — fail quiet, this isn't essential */ }
+}
+function renderWeather(){
+  if (!weather || !weather.days || !weather.days.length)
+    return `<div class="panel"><h3>Weather</h3><p class="note">Forecast not loaded yet — needs a connection. It'll fill in next time you're online.</p></div>`;
+  const dayName = d => { const dt=new Date(d+"T12:00:00"); return ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"][dt.getDay()]; };
+  return `<div class="panel"><h3>Weather</h3>
+    <div class="wxrow">${weather.days.map(d=>
+      `<div class="wxday"><p class="wxd">${dayName(d.date)}</p><p class="wxi">${wIcon(d.code)}</p><p class="wxt">${d.hi}°<span> / ${d.lo}°</span></p></div>`).join("")}</div>
+    </div>`;
+}
+
+/* ---------- combined MVP leaderboard (Quest + Gauntlet XP) ---------- */
+function renderMvp(){
+  const map = {};
+  (game && game.players || []).forEach(p=>{ map[p.id] = map[p.id] || {name:p.name, xp:0}; map[p.id].xp += (p.xp||0); map[p.id].name = p.name; });
+  (dungeon && dungeon.players || []).forEach(p=>{ map[p.id] = map[p.id] || {name:p.name, xp:0}; map[p.id].xp += (p.xp||0); map[p.id].name = p.name; });
+  const rows = Object.values(map).sort((a,b)=>b.xp-a.xp);
+  if (!rows.length) return "";
+  return `<div class="panel"><h3>Weekend MVP</h3><p>Combined XP from Quest and the Gauntlet.</p>
+    ${rows.map((r,i)=>`<div class="lb"><span class="av">${i===0?"👑":i+1}</span><span class="nm">${esc(r.name)}</span><span class="sc">${r.xp} XP</span></div>`).join("")}
+    </div>`;
+}
+
 function renderKit(){
   const decided=[];
   plan.days.forEach(d=>d.items.forEach(i=>{ if(i.options&&i.options.length)
     decided.push({label:`${fullDay(d).slice(0,3)} · ${i.title}`, val:i.place?i.place.name:"Still open"}); }));
-  return `
+  return renderWeather() + renderMvp() + `
   <div class="panel"><h3>The HQ</h3><p>${esc(plan.hq.addr)}</p>
     <div class="acts"><a class="btn go" href="${maps(plan.hq.q)}">Open in Maps</a>
     <button class="btn ghost" data-copy="${esc(plan.hq.addr)}">Copy address</button></div></div>
@@ -1405,7 +1460,7 @@ function addStop(dayId){ sheet(form({}));
 
 /* ---------- start ---------- */
 (function(){
-  render(); initSync(); setInterval(renderNow, 30000);
+  render(); initSync(); fetchWeather(); setInterval(renderNow, 30000);
 })();
 </script>
 </body>
