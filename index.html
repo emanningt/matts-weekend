@@ -138,6 +138,8 @@ label{display:block;color:var(--kelp);font-size:12.5px;margin-top:12px}
 .classpick{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:8px}
 .classpick button{border:1px solid var(--ink-line);border-radius:var(--r);padding:11px 8px;text-align:left;font-size:14px}
 .classpick button.on{border-color:var(--syrup);color:var(--syrup)}
+.classpick button.full{opacity:.4}
+.classpick button[disabled]{pointer-events:none}
 .classpick small{display:block;color:var(--kelp);font-size:11.5px;font-weight:400}
 .emojis{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}
 .emojis button{font-size:22px;padding:7px 9px;border:1px solid var(--ink-line);border-radius:var(--r)}
@@ -657,6 +659,12 @@ const DCARDS = {
   ]
 };
 function dCard(cls,id){ return DCARDS[cls].find(c=>c.id===id); }
+const CLASS_CAP = 2; // with 7-8 players and 4 classes, capping at 2 each keeps the party spread out
+function dClassCounts(){
+  const counts = {}; Object.keys(DCLASSES).forEach(k=>counts[k]=0);
+  dungeon.players.forEach(p=>{ if(counts[p.cls]!=null) counts[p.cls]++; });
+  return counts;
+}
 const DCLASS_STYLE = {
   ironclad:  {icon:"🛡️", color:"#8FA7B5"},
   emberwild: {icon:"🔥", color:"#E2604A"},
@@ -967,12 +975,19 @@ function dCheckRoundEnd(){
 /* ---- render: campaign lobby / character creation ---- */
 function renderGaunt(){
   const mine = myDP();
-  if (!mine) return dRenderJoin();
-  if (dungeon.phase==="lobby") return dRenderLobby(mine);
-  if (dungeon.phase==="battle") return dRenderBattle(mine);
-  if (dungeon.phase==="victory") return dRenderVictory();
-  if (dungeon.phase==="defeat") return dRenderDefeat();
-  return "";
+  let h = "";
+  if (!mine) h = dRenderJoin();
+  else if (dungeon.phase==="lobby") h = dRenderLobby(mine);
+  else if (dungeon.phase==="battle") h = dRenderBattle(mine);
+  else if (dungeon.phase==="victory") h = dRenderVictory();
+  else if (dungeon.phase==="defeat") h = dRenderDefeat();
+  return h + dResetPanel();
+}
+function dResetPanel(){
+  const canReset = !dungeon.hostId || dungeon.hostId===me.id;
+  if (!canReset) return "";
+  return `<div class="panel"><h3>Reset</h3><p>Wipes every character, the host claim, and progress — good for testing today before the trip.</p>
+    <div class="acts"><button class="btn warn" id="d_resetall">Reset the Gauntlet</button></div></div>`;
 }
 function dHostPanel(){
   const host = dungeon.hostId;
@@ -984,12 +999,16 @@ function dHostPanel(){
   return `<div class="panel"><p class="note">Hosted by ${esc(dungeon.hostName||"someone")}. <button class="btn ghost" id="d_reclaimhost" style="margin-top:8px">Not them? Claim host</button></p></div>`;
 }
 function dRenderJoin(){
+  const counts = dClassCounts(), entries = Object.entries(DCLASSES);
+  const firstOpen = entries.findIndex(([k])=>counts[k]<CLASS_CAP);
   return dHostPanel() + `<div class="panel"><h3>Build your character</h3>
     <p>This carries across all three days — same character, same gold and XP, from Friday's cellar to Sunday's vault.</p>
     <label for="d_name">Your name</label><input id="d_name" value="${esc(me.name||"")}" placeholder="Captain">
-    <label>Class</label>
-    <div class="classpick" id="d_class">${Object.entries(DCLASSES).map(([k,c],idx)=>
-      `<button data-dcls="${k}" class="${idx===0?"on":""}">${c.n}<small>${c.d}</small></button>`).join("")}</div>
+    <label>Class <small style="color:var(--kelp);font-weight:400">(2 max per class, so the party stays spread out)</small></label>
+    <div class="classpick" id="d_class">${entries.map(([k,c],idx)=>{
+      const full = counts[k]>=CLASS_CAP;
+      return `<button data-dcls="${k}" class="${idx===firstOpen?"on":""} ${full?"full":""}" ${full?"disabled":""}>${c.n}<small>${full?`Full — ${CLASS_CAP}/${CLASS_CAP} taken`:c.d}</small></button>`;
+    }).join("")}</div>
     <div class="acts" style="margin-top:16px"><button class="btn go" id="d_go">Enter the Gauntlet</button></div></div>
   <div class="panel"><h3>How it plays</h3>
     <p>Every round you play two cards from your hand — one for its top action, one for its bottom. The number on the card
@@ -1179,18 +1198,26 @@ function dRenderMyTurn(p, scn){
 
 /* ---- click handlers for the dungeon game ---- */
 document.addEventListener("click", e=>{
-  const t = e.target.closest("[data-dcls],#d_go,#d_begin,#d_beginanyway,[data-buy],#d_retry,[data-card],#d_confirm,#d_unlock,[data-rest],#d_startround,[data-act],#d_tutorial,[data-tut],#d_claimhost,#d_reclaimhost,#d_setcount");
+  const t = e.target.closest("[data-dcls],#d_go,#d_begin,#d_beginanyway,[data-buy],#d_retry,[data-card],#d_confirm,#d_unlock,[data-rest],#d_startround,[data-act],#d_tutorial,[data-tut],#d_claimhost,#d_reclaimhost,#d_setcount,#d_resetall");
   if (!t) return; const g = n=>t.getAttribute(n);
 
-  if (g("data-dcls")){ [...t.parentNode.children].forEach(b=>b.classList.remove("on")); t.classList.add("on"); return; }
+  if (g("data-dcls")){ if(t.classList.contains("full")) return; [...t.parentNode.children].forEach(b=>b.classList.remove("on")); t.classList.add("on"); return; }
   if (t.id==="d_go"){
     const name=($("d_name").value||"").trim(); if(!name){ toast("Name first"); return; }
     const cls=$("d_class").querySelector(".on").getAttribute("data-dcls");
+    if ((dClassCounts()[cls]||0) >= CLASS_CAP){ toast(DCLASSES[cls].n+" just filled up — pick another class"); render(); return; }
     me.name=name; saveMe();
     dungeon.players.push({id:me.id,name,cls,gold:0,xp:0,hand:[],discard:[],lost:[],hp:0,maxHp:0,zone:0,shield:0,taunt:false,ko:false,selected:null,deck:[]});
     logD(`<b>${esc(name)}</b> the ${DCLASSES[cls].n} joins the Gauntlet`);
     saveDungeon(); render();
     if (!store.getItem("azsd.tutSeen")) dShowTutorial();
+    return;
+  }
+  if (t.id==="d_resetall"){
+    if (dungeon.hostId && dungeon.hostId!==me.id){ toast("Only "+(dungeon.hostName||"the host")+" can reset this"); return; }
+    if (confirm("Reset the whole Gauntlet — everyone's characters, progress, and the host claim? This can't be undone.")){
+      dungeon = newDungeon(); saveDungeon(); render(); toast("Gauntlet reset");
+    }
     return;
   }
   if (t.id==="d_claimhost"){
@@ -1481,14 +1508,23 @@ function renderQuest(){
   h += `<p class="mode">${syncOn ? "Live — everyone sees the same board" : "This phone only — pass it around to take turns"}</p>`;
   return h;
 }
+function qClassCounts(){
+  const counts = {}; Object.keys(CLASSES).forEach(k=>counts[k]=0);
+  game.players.forEach(p=>{ if(counts[p.cls]!=null) counts[p.cls]++; });
+  return counts;
+}
 function renderJoin(){
+  const counts = qClassCounts(), entries = Object.entries(CLASSES);
+  const firstOpen = entries.findIndex(([k])=>counts[k]<CLASS_CAP);
   return `<div class="panel">
     <h3>Make your character</h3>
     <p>Everyone builds one, then you take turns across the weekend. Cards send you into the real world.</p>
     <label for="j_name">Your name</label><input id="j_name" value="${esc(me.name||"")}" placeholder="Captain">
-    <label>Class</label>
-    <div class="classpick" id="j_class">${Object.entries(CLASSES).map(([k,c],idx)=>
-      `<button data-cls="${k}" class="${idx===0?"on":""}">${c.n}<small>${c.d}</small></button>`).join("")}</div>
+    <label>Class <small style="color:var(--kelp);font-weight:400">(2 max per class, so the party stays spread out)</small></label>
+    <div class="classpick" id="j_class">${entries.map(([k,c],idx)=>{
+      const full = counts[k]>=CLASS_CAP;
+      return `<button data-cls="${k}" class="${idx===firstOpen?"on":""} ${full?"full":""}" ${full?"disabled":""}>${c.n}<small>${full?`Full — ${CLASS_CAP}/${CLASS_CAP} taken`:c.d}</small></button>`;
+    }).join("")}</div>
     <label>Token</label>
     <div class="emojis" id="j_av">${AVATARS.map((a,idx)=>`<button data-av="${a}" class="${idx===0?"on":""}">${a}</button>`).join("")}</div>
     <div class="acts" style="margin-top:16px"><button class="btn go" id="j_go">Join the party</button></div>
@@ -1612,12 +1648,13 @@ document.addEventListener("click", e=>{
   if (t.id==="copyplan"){ copy("const PUBLISHED = "+JSON.stringify(cleanPlan(plan),null,2)+";", "Plan copied — paste it into GitHub"); return; }
 
   /* game */
-  if (g("data-cls")){ [...t.parentNode.children].forEach(b=>b.classList.remove("on")); t.classList.add("on"); return; }
+  if (g("data-cls")){ if(t.classList.contains("full")) return; [...t.parentNode.children].forEach(b=>b.classList.remove("on")); t.classList.add("on"); return; }
   if (g("data-av")){ [...t.parentNode.children].forEach(b=>b.classList.remove("on")); t.classList.add("on"); return; }
   if (t.id==="j_go"){
     const name = ($("j_name").value||"").trim();
     if (!name){ toast("Name first"); return; }
     const cls = $("j_class").querySelector(".on").getAttribute("data-cls");
+    if ((qClassCounts()[cls]||0) >= CLASS_CAP){ toast(CLASSES[cls].n+" just filled up — pick another class"); render(); return; }
     const av  = $("j_av").querySelector(".on").getAttribute("data-av");
     joinGame(name, cls, av); toast("You're in"); return;
   }
