@@ -468,23 +468,42 @@ function compressImage(file){
 /* Firebase — both games share one project, different paths so they never collide:
    games/{ROOM}/quest   -> the board game
    games/{ROOM}/dungeon -> the Groom's Gauntlet campaign */
-let dSyncToastShown = false;
+let dSyncToastShown = false, dSyncStage = "starting", dSyncError = "";
 function initSync(){
-  if (!FIREBASE_CONFIG || syncOn) return;
-  const load = src => new Promise((res,rej)=>{ const s=document.createElement("script"); s.src=src; s.onload=res; s.onerror=rej; document.head.appendChild(s); });
+  if (!FIREBASE_CONFIG) return;
+  if (firebase && firebase.apps && firebase.apps.length && syncOn) return;
+  dSyncStage = "loading Firebase";
+  const load = src => new Promise((res,rej)=>{
+    const s=document.createElement("script"); s.src=src;
+    s.onload=res;
+    s.onerror=()=>rej(new Error("could not download "+src.split("/").pop()));
+    document.head.appendChild(s);
+  });
   const loadBoth = () => load("https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js")
     .then(()=>load("https://www.gstatic.com/firebasejs/10.12.0/firebase-database-compat.js"));
   const attempt = (n) => loadBoth().catch(err => {
-    if (n<3) return new Promise(r=>setTimeout(r,1200)).then(()=>attempt(n+1));
+    if (n<3){ dSyncStage="retrying script load ("+n+"/3)"; return new Promise(r=>setTimeout(r,1200)).then(()=>attempt(n+1)); }
     throw err;
   });
   attempt(1)
     .then(()=>{
+      dSyncStage = "connecting to database";
       if (!firebase.apps.length) firebase.initializeApp(FIREBASE_CONFIG);
       fbRef = firebase.database().ref("games/"+ROOM+"/quest");
       dRef  = firebase.database().ref("games/"+ROOM+"/dungeon");
       pRef  = firebase.database().ref("games/"+ROOM+"/photos");
-      syncOn = true;
+
+      /* Firebase tells us directly whether we're actually connected — far more honest
+         than assuming we're live just because the scripts downloaded. This flips
+         automatically on every drop and reconnect, so the status is always real. */
+      firebase.database().ref(".info/connected").on("value", snap => {
+        const wasOn = syncOn;
+        syncOn = snap.val() === true;
+        dSyncStage = syncOn ? "connected" : "offline — will reconnect automatically";
+        if (syncOn && !wasOn) dSyncError = "";
+        if (view==="gaunt" || view==="quest") render();
+      });
+
       fbRef.on("value", snap => {
         const v = snap.val();
         if (v){ game = v; game.players = game.players || []; game.log = game.log || []; }
@@ -495,10 +514,6 @@ function initSync(){
         const v = snap.val();
         if (v){
           v.players = v.players || [];
-          /* if I made local progress (like just creating my character) that the server
-             hasn't seen yet — because my own connection was still catching up — fold it
-             back in instead of silently losing it. Only during initial setup, never once
-             a scenario's actually underway, to avoid touching live battle state. */
           const localMine = dungeon && dungeon.players && dungeon.players.find(p=>p.id===me.id);
           const serverHasMine = v.players.some(p=>p.id===me.id);
           if (localMine && !serverHasMine && v.phase==="lobby" && v.scenarioIndex===0) v.players.push(localMine);
@@ -506,17 +521,19 @@ function initSync(){
         } else { dRef.set(dungeon); }
         dScheduleAutoResolve();
         if (view==="gaunt" && !dBusy) render();
-      });
+      }, err => { dSyncError = "database read refused: "+(err && err.message ? err.message : "unknown"); render(); });
       pRef.on("value", snap => {
         const v = snap.val();
         if (v) photos = v; else if (photos.length) pRef.set(photos);
         if (view==="quest") render();
       });
     })
-    .catch(()=>{
-      if (!dSyncToastShown){ toast("Live sync did not load — retrying in the background"); dSyncToastShown = true; }
+    .catch(err=>{
+      dSyncStage = "failed";
+      dSyncError = (err && err.message) ? err.message : "unknown error";
+      if (!dSyncToastShown){ toast("Sync failed — see the status at the bottom"); dSyncToastShown = true; }
       render();
-      setTimeout(initSync, 20000); // keep trying — a dead zone at launch shouldn't lock out sync for the whole session
+      setTimeout(initSync, 15000);
     });
 }
 const myPlayer = () => game.players.find(p=>p.id===me.id);
@@ -1122,7 +1139,14 @@ function renderGaunt(){
   return h + dResetPanel() + dSyncStatus();
 }
 function dSyncStatus(){
-  return `<p class="mode">${syncOn ? "🟢 Live — synced, your progress is saved to everyone's game" : "🔴 Not synced — progress only lives on this phone right now"}</p>`;
+  if (syncOn) return `<p class="mode">🟢 Live — synced, everyone sees the same game</p>`;
+  return `<div class="panel" style="border-color:var(--sunset)">
+    <h3 style="color:var(--sunset)">🔴 Not synced</h3>
+    <p>Progress is only on this phone right now. Others won't see it and it isn't backed up.</p>
+    <p style="margin-top:8px"><b style="color:var(--sand)">Status:</b> ${esc(dSyncStage)}</p>
+    ${dSyncError?`<p style="margin-top:4px"><b style="color:var(--sand)">Error:</b> ${esc(dSyncError)}</p>`:""}
+    <div class="acts"><button class="btn go" id="d_retrysync">Try connecting again</button></div>
+    <p class="note" style="margin-top:8px">If this keeps failing, screenshot this box — the status and error tell us exactly what's wrong.</p></div>`;
 }
 function dResetPanel(){
   const canReset = !dungeon.hostId || dungeon.hostId===me.id;
@@ -1130,31 +1154,40 @@ function dResetPanel(){
   return `<div class="panel"><h3>Reset</h3><p>Wipes every character, the host claim, and progress — good for testing today before the trip.</p>
     <div class="acts"><button class="btn warn" id="d_resetall">Reset the Gauntlet</button></div></div>`;
 }
-/* checks the ACTUAL current server state before claiming host, not just the
-   local copy — a device that's stale or briefly disconnected shouldn't be able
-   to silently create a second "host" that conflicts with the real one. */
+/* Host is exclusive at the SERVER level, not just hidden in the UI. We read the
+   live value, and only write if it's genuinely free (or the user explicitly chose
+   to take over). A device that can't reach the server refuses rather than
+   pretending it succeeded — a wrong "you're the host" is worse than a clear error. */
 function dClaimHostSafely(nm, isReclaim){
   const commit = ()=>{
     dungeon.hostId=me.id; dungeon.hostName=nm; me.name=nm; saveMe();
     saveDungeon(); render(); toast(isReclaim?"You're the host now":"You're the host");
   };
-  if (!syncOn || !dRef){ commit(); return; } // genuinely local-only play — nothing to conflict with
+  if (!syncOn || !dRef){
+    toast("Can't claim host while offline — connect first");
+    render(); return;
+  }
   toast("Checking…");
   dRef.child("hostId").once("value")
     .then(snap=>{
       const serverHost = snap.val();
       if (serverHost && serverHost!==me.id){
+        const who = dungeon.hostName || "Someone";
         if (isReclaim){
-          if (confirm(`${dungeon.hostName||"Someone"} already has host on the server. Take over anyway?`)) commit();
+          if (confirm(`${who} already has host on the server. Take over anyway?`)) commit();
         } else {
-          toast("Someone's already host — pull to refresh and check who");
+          toast(who+" is already host");
           render();
         }
         return;
       }
       commit();
     })
-    .catch(()=>toast("Couldn't confirm — check your connection and try again"));
+    .catch(e=>{
+      dSyncError = "host check failed: "+(e && e.message ? e.message : "unknown");
+      toast("Couldn't confirm host — check the status at the bottom");
+      render();
+    });
 }
 function dHostPanel(){
   const host = dungeon.hostId;
@@ -1358,7 +1391,7 @@ function dRenderMyTurn(p, scn){
 
 /* ---- click handlers for the dungeon game ---- */
 document.addEventListener("click", e=>{
-  const t = e.target.closest("[data-dcls],#d_go,#d_begin,#d_beginanyway,[data-buy],#d_retry,[data-card],#d_confirm,#d_unlock,[data-rest],#d_startround,[data-act],#d_tutorial,[data-tut],#d_claimhost,#d_reclaimhost,#d_setcount,#d_resetall");
+  const t = e.target.closest("[data-dcls],#d_go,#d_begin,#d_beginanyway,[data-buy],#d_retry,[data-card],#d_confirm,#d_unlock,[data-rest],#d_startround,[data-act],#d_tutorial,[data-tut],#d_claimhost,#d_reclaimhost,#d_setcount,#d_resetall,#d_retrysync");
   if (!t) return; const g = n=>t.getAttribute(n);
 
   if (g("data-dcls")){ if(t.classList.contains("full")) return; [...t.parentNode.children].forEach(b=>b.classList.remove("on")); t.classList.add("on"); return; }
@@ -1372,6 +1405,10 @@ document.addEventListener("click", e=>{
     saveDungeon(); render();
     if (!store.getItem("azsd.tutSeen")) dShowTutorial();
     return;
+  }
+  if (t.id==="d_retrysync"){
+    dSyncStage="starting"; dSyncError=""; dSyncToastShown=false;
+    toast("Reconnecting…"); render(); initSync(); return;
   }
   if (t.id==="d_resetall"){
     if (dungeon.hostId && dungeon.hostId!==me.id){ toast("Only "+(dungeon.hostName||"the host")+" can reset this"); return; }
