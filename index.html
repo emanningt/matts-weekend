@@ -470,71 +470,81 @@ function compressImage(file){
    games/{ROOM}/dungeon -> the Groom's Gauntlet campaign */
 let dSyncToastShown = false, dSyncStage = "starting", dSyncError = "";
 function initSync(){
-  if (!FIREBASE_CONFIG) return;
-  if (firebase && firebase.apps && firebase.apps.length && syncOn) return;
-  dSyncStage = "loading Firebase";
-  const load = src => new Promise((res,rej)=>{
-    const s=document.createElement("script"); s.src=src;
-    s.onload=res;
-    s.onerror=()=>rej(new Error("could not download "+src.split("/").pop()));
-    document.head.appendChild(s);
-  });
-  const loadBoth = () => load("https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js")
-    .then(()=>load("https://www.gstatic.com/firebasejs/10.12.0/firebase-database-compat.js"));
-  const attempt = (n) => loadBoth().catch(err => {
-    if (n<3){ dSyncStage="retrying script load ("+n+"/3)"; return new Promise(r=>setTimeout(r,1200)).then(()=>attempt(n+1)); }
-    throw err;
-  });
-  attempt(1)
-    .then(()=>{
-      dSyncStage = "connecting to database";
-      if (!firebase.apps.length) firebase.initializeApp(FIREBASE_CONFIG);
-      fbRef = firebase.database().ref("games/"+ROOM+"/quest");
-      dRef  = firebase.database().ref("games/"+ROOM+"/dungeon");
-      pRef  = firebase.database().ref("games/"+ROOM+"/photos");
-
-      /* Firebase tells us directly whether we're actually connected — far more honest
-         than assuming we're live just because the scripts downloaded. This flips
-         automatically on every drop and reconnect, so the status is always real. */
-      firebase.database().ref(".info/connected").on("value", snap => {
-        const wasOn = syncOn;
-        syncOn = snap.val() === true;
-        dSyncStage = syncOn ? "connected" : "offline — will reconnect automatically";
-        if (syncOn && !wasOn) dSyncError = "";
-        if (view==="gaunt" || view==="quest") render();
-      });
-
-      fbRef.on("value", snap => {
-        const v = snap.val();
-        if (v){ game = v; game.players = game.players || []; game.log = game.log || []; }
-        else { fbRef.set(game); }
-        if (view==="quest") render();
-      });
-      dRef.on("value", snap => {
-        const v = snap.val();
-        if (v){
-          v.players = v.players || [];
-          const localMine = dungeon && dungeon.players && dungeon.players.find(p=>p.id===me.id);
-          const serverHasMine = v.players.some(p=>p.id===me.id);
-          if (localMine && !serverHasMine && v.phase==="lobby" && v.scenarioIndex===0) v.players.push(localMine);
-          dungeon = v; dungeon.log = dungeon.log || [];
-        } else { dRef.set(dungeon); }
-        dScheduleAutoResolve();
-        if (view==="gaunt" && !dBusy) render();
-      }, err => { dSyncError = "database read refused: "+(err && err.message ? err.message : "unknown"); render(); });
-      pRef.on("value", snap => {
-        const v = snap.val();
-        if (v) photos = v; else if (photos.length) pRef.set(photos);
-        if (view==="quest") render();
-      });
-    })
-    .catch(err=>{
-      dSyncStage = "failed";
-      dSyncError = (err && err.message) ? err.message : "unknown error";
-      if (!dSyncToastShown){ toast("Sync failed — see the status at the bottom"); dSyncToastShown = true; }
-      render();
-      setTimeout(initSync, 15000);
+  try {
+    if (!FIREBASE_CONFIG) return;
+    /* must use typeof — a bare `firebase` reference throws ReferenceError before
+       the SDK has loaded, which silently killed this whole function on first run */
+    if (typeof firebase !== "undefined" && firebase.apps && firebase.apps.length && syncOn) return;
+    dSyncStage = "loading Firebase";
+    const load = src => new Promise((res,rej)=>{
+      const s=document.createElement("script"); s.src=src;
+      s.onload=res;
+      s.onerror=()=>rej(new Error("could not download "+src.split("/").pop()));
+      document.head.appendChild(s);
     });
+    const loadBoth = () => load("https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js")
+      .then(()=>load("https://www.gstatic.com/firebasejs/10.12.0/firebase-database-compat.js"));
+    const attempt = (n) => loadBoth().catch(err => {
+      if (n<3){ dSyncStage="retrying script load ("+n+"/3)"; return new Promise(r=>setTimeout(r,1200)).then(()=>attempt(n+1)); }
+      throw err;
+    });
+    attempt(1)
+      .then(()=>{
+        dSyncStage = "connecting to database";
+        if (!firebase.apps.length) firebase.initializeApp(FIREBASE_CONFIG);
+        fbRef = firebase.database().ref("games/"+ROOM+"/quest");
+        dRef  = firebase.database().ref("games/"+ROOM+"/dungeon");
+        pRef  = firebase.database().ref("games/"+ROOM+"/photos");
+
+        /* Firebase tells us directly whether we're actually connected — far more honest
+           than assuming we're live just because the scripts downloaded. This flips
+           automatically on every drop and reconnect, so the status is always real. */
+        firebase.database().ref(".info/connected").on("value", snap => {
+          const wasOn = syncOn;
+          syncOn = snap.val() === true;
+          dSyncStage = syncOn ? "connected" : "offline — will reconnect automatically";
+          if (syncOn && !wasOn) dSyncError = "";
+          if (view==="gaunt" || view==="quest") render();
+        });
+
+        fbRef.on("value", snap => {
+          const v = snap.val();
+          if (v){ game = v; game.players = game.players || []; game.log = game.log || []; }
+          else { fbRef.set(game); }
+          if (view==="quest") render();
+        });
+        dRef.on("value", snap => {
+          const v = snap.val();
+          if (v){
+            v.players = v.players || [];
+            const localMine = dungeon && dungeon.players && dungeon.players.find(p=>p.id===me.id);
+            const serverHasMine = v.players.some(p=>p.id===me.id);
+            if (localMine && !serverHasMine && v.phase==="lobby" && v.scenarioIndex===0) v.players.push(localMine);
+            dungeon = v; dungeon.log = dungeon.log || [];
+          } else { dRef.set(dungeon); }
+          dScheduleAutoResolve();
+          if (view==="gaunt" && !dBusy) render();
+        }, err => { dSyncError = "database read refused: "+(err && err.message ? err.message : "unknown"); render(); });
+        pRef.on("value", snap => {
+          const v = snap.val();
+          if (v) photos = v; else if (photos.length) pRef.set(photos);
+          if (view==="quest") render();
+        });
+      })
+      .catch(err=>{
+        dSyncStage = "failed";
+        dSyncError = (err && err.message) ? err.message : "unknown error";
+        if (!dSyncToastShown){ toast("Sync failed — see the status at the bottom"); dSyncToastShown = true; }
+        render();
+        setTimeout(initSync, 15000);
+      });
+  } catch(err){
+    /* a crash in here used to leave the status frozen at "starting" with no clue why */
+    dSyncStage = "crashed during setup";
+    dSyncError = (err && err.message) ? err.message : String(err);
+    render();
+    setTimeout(initSync, 15000);
+  }
 }
 const myPlayer = () => game.players.find(p=>p.id===me.id);
 const activeP  = () => game.players[game.turn % Math.max(game.players.length,1)];
@@ -1155,14 +1165,10 @@ function dResetPanel(){
     <div class="acts"><button class="btn warn" id="d_resetall">Reset the Gauntlet</button></div></div>`;
 }
 /* Host is exclusive at the SERVER level, not just hidden in the UI. We read the
-   live value, and only write if it's genuinely free (or the user explicitly chose
-   to take over). A device that can't reach the server refuses rather than
-   pretending it succeeded — a wrong "you're the host" is worse than a clear error. */
-function dClaimHostSafely(nm, isReclaim){
-  const commit = ()=>{
-    dungeon.hostId=me.id; dungeon.hostName=nm; me.name=nm; saveMe();
-    saveDungeon(); render(); toast(isReclaim?"You're the host now":"You're the host");
-  };
+   live value and only write if it's genuinely free. There is deliberately no
+   takeover path — the current host must release it first. A device that can't
+   reach the server refuses rather than pretending it succeeded. */
+function dClaimHostSafely(nm){
   if (!syncOn || !dRef){
     toast("Can't claim host while offline — connect first");
     render(); return;
@@ -1172,16 +1178,11 @@ function dClaimHostSafely(nm, isReclaim){
     .then(snap=>{
       const serverHost = snap.val();
       if (serverHost && serverHost!==me.id){
-        const who = dungeon.hostName || "Someone";
-        if (isReclaim){
-          if (confirm(`${who} already has host on the server. Take over anyway?`)) commit();
-        } else {
-          toast(who+" is already host");
-          render();
-        }
-        return;
+        toast((dungeon.hostName||"Someone")+" is already host");
+        render(); return;
       }
-      commit();
+      dungeon.hostId=me.id; dungeon.hostName=nm; me.name=nm; saveMe();
+      saveDungeon(); render(); toast("You're the host");
     })
     .catch(e=>{
       dSyncError = "host check failed: "+(e && e.message ? e.message : "unknown");
@@ -1195,8 +1196,17 @@ function dHostPanel(){
     <p>Whoever's hosting the trip should claim this — you'll control the headcount and when each scenario starts. Everyone else just plays.</p>
     <div class="acts"><button class="btn go" id="d_claimhost">I'm running this</button></div></div>`;
   if (host===me.id) return `<div class="panel"><h3>You're the host</h3>
-    <p>You control the headcount and when each scenario starts. Everything else — cards, moves, turns — anyone can drive.</p></div>`;
-  return `<div class="panel"><p class="note">Hosted by ${esc(dungeon.hostName||"someone")}. <button class="btn ghost" id="d_reclaimhost" style="margin-top:8px">Not them? Claim host</button></p></div>`;
+    <p>You control the headcount and when each scenario starts. Everything else — cards, moves, turns — anyone can drive. Nobody else can take host from you.</p>
+    <div class="acts"><button class="btn ghost" id="d_releasehost">Release host</button></div>
+    <p class="note" style="margin-top:8px">Only release it if you're handing off or switching phones — it frees the role for someone else to claim.</p></div>`;
+  return `<div class="panel"><p class="note">🔒 Hosted by ${esc(dungeon.hostName||"someone")} — only they can start scenarios.</p></div>`;
+}
+/* Identity is derived from a code the player picks, not a random per-device value.
+   Same code entered on any phone or tablet = the same character, so switching
+   devices mid-trip keeps your progress, your gear, and host if you had it. */
+function dCodeToId(code){
+  const clean = String(code||"").toLowerCase().replace(/[^a-z0-9]/g,"");
+  return clean ? "pc_"+clean : "";
 }
 function dRenderJoin(){
   const counts = dClassCounts(), entries = Object.entries(DCLASSES);
@@ -1204,12 +1214,18 @@ function dRenderJoin(){
   return dHostPanel() + `<div class="panel"><h3>Build your character</h3>
     <p>This carries across all three days — same character, same gold and XP, from Friday's cellar to Sunday's vault.</p>
     <label for="d_name">Your name</label><input id="d_name" value="${esc(me.name||"")}" placeholder="Captain">
+    <label for="d_code">Pick a recovery code <small style="color:var(--kelp);font-weight:400">— write it down. Enter it on any other phone or iPad to pick up this exact character.</small></label>
+    <input id="d_code" placeholder="e.g. captain-cellar-99" autocapitalize="off" autocorrect="off">
     <label>Class <small style="color:var(--kelp);font-weight:400">(2 max per class, so the party stays spread out)</small></label>
     <div class="classpick" id="d_class">${entries.map(([k,c],idx)=>{
       const full = counts[k]>=CLASS_CAP;
       return `<button data-dcls="${k}" class="${idx===firstOpen?"on":""} ${full?"full":""}" ${full?"disabled":""}>${c.n}<small>${full?`Full — ${CLASS_CAP}/${CLASS_CAP} taken`:c.d}</small></button>`;
     }).join("")}</div>
     <div class="acts" style="margin-top:16px"><button class="btn go" id="d_go">Enter the Gauntlet</button></div></div>
+  <div class="panel"><h3>Switching devices?</h3>
+    <p>If you already made a character on another phone, enter its recovery code here to pick it right back up.</p>
+    <label for="d_restore">Recovery code</label><input id="d_restore" placeholder="your code" autocapitalize="off" autocorrect="off">
+    <div class="acts"><button class="btn solid" id="d_dorestore">Restore my character</button></div></div>
   <div class="panel"><h3>How it plays</h3>
     <p>Every round you play two cards from your hand — one for its top action, one for its bottom. The number on the card
     you use for your top action sets your turn order that round, same as the monsters. No dice for that part.
@@ -1226,6 +1242,7 @@ function dRenderLobby(mine){
              : `<p class="note">Waiting for ${esc(dungeon.hostName||"the host")} to start ${esc(scn.name)}.</p>`}</div>`;
   h += `<div class="panel"><h3>Your character</h3>
     <p>${DCLASSES[mine.cls].n} · Level ${dLevel(mine)} · ${mine.gold||0} gold</p>
+    ${me.code?`<p class="note" style="margin-top:6px">🔑 Recovery code: <b style="color:var(--syrup)">${esc(me.code)}</b> — enter this on another device to continue as this character.</p>`:""}
     <label>Whetstone — permanent +1 to attacks (10 gold)</label>
     <div class="acts"><button class="btn ${((mine.gold||0)<10)?"ghost":"solid"}" data-buy="atk" ${((mine.gold||0)<10)?"disabled":""}>Buy</button></div>
     <label>Vitality Charm — permanent +2 max HP (10 gold)</label>
@@ -1391,19 +1408,40 @@ function dRenderMyTurn(p, scn){
 
 /* ---- click handlers for the dungeon game ---- */
 document.addEventListener("click", e=>{
-  const t = e.target.closest("[data-dcls],#d_go,#d_begin,#d_beginanyway,[data-buy],#d_retry,[data-card],#d_confirm,#d_unlock,[data-rest],#d_startround,[data-act],#d_tutorial,[data-tut],#d_claimhost,#d_reclaimhost,#d_setcount,#d_resetall,#d_retrysync");
+  const t = e.target.closest("[data-dcls],#d_go,#d_begin,#d_beginanyway,[data-buy],#d_retry,[data-card],#d_confirm,#d_unlock,[data-rest],#d_startround,[data-act],#d_tutorial,[data-tut],#d_claimhost,#d_releasehost,#d_setcount,#d_resetall,#d_retrysync,#d_dorestore");
   if (!t) return; const g = n=>t.getAttribute(n);
 
   if (g("data-dcls")){ if(t.classList.contains("full")) return; [...t.parentNode.children].forEach(b=>b.classList.remove("on")); t.classList.add("on"); return; }
   if (t.id==="d_go"){
     const name=($("d_name").value||"").trim(); if(!name){ toast("Name first"); return; }
+    const rawCode=($("d_code")&&$("d_code").value||"").trim();
+    const newId = dCodeToId(rawCode);
+    if (!newId){ toast("Pick a recovery code — you'll need it to switch devices"); return; }
+    if (dungeon.players.some(p=>p.id===newId)){
+      toast("That code's already used — pick another, or use Restore below if it's yours");
+      return;
+    }
     const cls=$("d_class").querySelector(".on").getAttribute("data-dcls");
     if ((dClassCounts()[cls]||0) >= CLASS_CAP){ toast(DCLASSES[cls].n+" just filled up — pick another class"); render(); return; }
-    me.name=name; saveMe();
+    me.id = newId; me.name = name; me.code = rawCode; saveMe();
     dungeon.players.push({id:me.id,name,cls,gold:0,xp:0,hand:[],discard:[],lost:[],hp:0,maxHp:0,zone:0,shield:0,taunt:false,ko:false,selected:null,deck:[]});
     logD(`<b>${esc(name)}</b> the ${DCLASSES[cls].n} joins the Gauntlet`);
     saveDungeon(); render();
     if (!store.getItem("azsd.tutSeen")) dShowTutorial();
+    return;
+  }
+  if (t.id==="d_dorestore"){
+    const rawCode=($("d_restore")&&$("d_restore").value||"").trim();
+    const wantId = dCodeToId(rawCode);
+    if (!wantId){ toast("Enter your recovery code"); return; }
+    const found = dungeon.players.find(p=>p.id===wantId);
+    if (!found){
+      toast(syncOn ? "No character found with that code" : "Can't check while offline — connect first");
+      return;
+    }
+    me.id = wantId; me.name = found.name; me.code = rawCode; saveMe();
+    render();
+    toast("Welcome back, "+found.name);
     return;
   }
   if (t.id==="d_retrysync"){
@@ -1420,13 +1458,14 @@ document.addEventListener("click", e=>{
   if (t.id==="d_claimhost"){
     const nm = ($("d_name") && $("d_name").value.trim()) || prompt("Your name, for the host label:", me.name||"");
     if (!nm) return;
-    dClaimHostSafely(nm, false);
+    dClaimHostSafely(nm);
     return;
   }
-  if (t.id==="d_reclaimhost"){
-    const nm = prompt("Your name, for the host label:", me.name||"");
-    if (!nm) return;
-    dClaimHostSafely(nm, true);
+  if (t.id==="d_releasehost"){
+    if (dungeon.hostId !== me.id){ toast("You're not the host"); return; }
+    if (!confirm("Release host? Someone else will be able to claim it.")) return;
+    dungeon.hostId = null; dungeon.hostName = null;
+    saveDungeon(); render(); toast("Host released");
     return;
   }
   if (t.id==="d_setcount"){
