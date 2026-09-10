@@ -1069,7 +1069,7 @@ function dRenderMap(scn, highlight){
             <text x="${px}" y="${py+4}" text-anchor="middle" style="font-size:11px">${st.icon}</text>`;
         }
       });
-      nameLine = hereP.map(p=>esc(p.name.slice(0,4))+(p.ko?"✝":"")).join(" · ");
+      nameLine = hereP.map(p=>p.name.slice(0,4)+(p.ko?"✝":"")).join(" · ");
       if (nameLine.length>24) nameLine = nameLine.slice(0,22)+"…";
     }
 
