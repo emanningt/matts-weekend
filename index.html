@@ -908,9 +908,41 @@ function dLayoutZones(scn){
   Object.keys(cols).forEach(d=>cols[d].forEach((z,i)=>{ pos[z]={col:+d, row:i, rowsInCol:cols[d].length}; }));
   return pos;
 }
-/* hex floor as one reusable <pattern> rather than hundreds of individual polygons —
-   same honeycomb look, but the browser paints one tile instead of ~540 DOM nodes,
-   which matters because the map re-renders on every action. */
+/* The map re-renders on every sync update, which used to snap it back to the far
+   left mid-turn. We remember where it was scrolled and put it back, and only
+   auto-centre when the player actually moves to a different room — or when they
+   tap "Centre on me". Manual scrolling is never overridden. */
+let dMapScroll = 0, dMapLastZone = null, dMapUserMoved = false;
+function dRestoreMapScroll(){
+  const el = $("dmapscroll");
+  if (!el || !el.addEventListener) return;
+  const zone = el.getAttribute("data-zone");
+  const myx = parseFloat(el.getAttribute("data-myx"));
+  const zoneChanged = zone !== "" && zone !== dMapLastZone;
+
+  if (zoneChanged || !dMapUserMoved){
+    if (!isNaN(myx)){
+      const target = Math.max(0, myx - el.clientWidth/2);
+      el.scrollLeft = target;
+      dMapScroll = target;
+    }
+    if (zoneChanged){ dMapLastZone = zone; dMapUserMoved = false; }
+  } else {
+    el.scrollLeft = dMapScroll;   // leave it exactly where they put it
+  }
+  el.addEventListener("scroll", ()=>{
+    dMapScroll = el.scrollLeft;
+    dMapUserMoved = true;
+  }, {passive:true});
+}
+function dCentreMapOnMe(){
+  dMapUserMoved = false;
+  const el = $("dmapscroll");
+  if (el && el.getAttribute){
+    const myx = parseFloat(el.getAttribute("data-myx"));
+    if (!isNaN(myx)){ const t = Math.max(0, myx - el.clientWidth/2); el.scrollLeft = t; dMapScroll = t; }
+  }
+}
 function hexPatternDef(){
   const r=11, w=r*3, h=r*Math.sqrt(3);
   const hex = (cx,cy)=>{
@@ -1039,8 +1071,9 @@ function dRenderMap(scn, highlight){
     </g>`;
   });
 
+  const myZoneX = (mine && pos[mine.zone]) ? center(mine.zone).x : null;
   return `<div class="panel"><h3>🗺 Map</h3>
-    <div style="overflow-x:auto;-webkit-overflow-scrolling:touch;border-radius:8px">
+    <div id="dmapscroll" data-myx="${myZoneX===null?"":Math.round(myZoneX)}" data-zone="${mine?mine.zone:""}" style="overflow-x:auto;-webkit-overflow-scrolling:touch;border-radius:8px">
     <svg width="${w}" height="${h}" viewBox="0 0 ${w} ${h}" style="display:block" xmlns="http://www.w3.org/2000/svg">
       <defs><radialGradient id="dgmap" cx="50%" cy="35%" r="82%">
         <stop offset="0%" stop-color="#142936"/><stop offset="100%" stop-color="#080F15"/>
@@ -1048,7 +1081,8 @@ function dRenderMap(scn, highlight){
       <rect x="0" y="0" width="${w}" height="${h}" rx="10" style="fill:url(#dgmap)"/>
       ${edges}${nodes}
     </svg></div>
-    <p class="note">Your room glows amber${Object.keys(highlight).length?" — lit-up rooms are your options right now.":"."}${maxCol>2?" Swipe to see the rest of the map.":""}</p></div>`;
+    <p class="note">Your room glows amber${Object.keys(highlight).length?" — lit-up rooms are your options right now.":"."}${maxCol>2?" Swipe to look around.":""}</p>
+    ${maxCol>2?`<div class="acts"><button class="btn ghost" id="d_centremap">🎯 Centre on me</button></div>`:""}</div>`;
 }
 function monIconOf(name){ return MONICON[name] || "👹"; }
 
@@ -1557,7 +1591,7 @@ function dRenderMyTurn(p, scn){
 
 /* ---- click handlers for the dungeon game ---- */
 document.addEventListener("click", e=>{
-  const t = e.target.closest("[data-dcls],#d_go,#d_begin,#d_beginanyway,[data-buy],#d_retry,[data-card],#d_confirm,#d_unlock,[data-rest],#d_startround,[data-act],#d_tutorial,[data-tut],#d_claimhost,#d_releasehost,#d_setcount,#d_resetall,#d_retrysync,#d_dorestore,#d_clearerr");
+  const t = e.target.closest("[data-dcls],#d_go,#d_begin,#d_beginanyway,[data-buy],#d_retry,[data-card],#d_confirm,#d_unlock,[data-rest],#d_startround,[data-act],#d_tutorial,[data-tut],#d_claimhost,#d_releasehost,#d_setcount,#d_resetall,#d_retrysync,#d_dorestore,#d_clearerr,#d_centremap");
   if (!t) return; const g = n=>t.getAttribute(n);
 
   if (g("data-dcls")){ if(t.classList.contains("full")) return; [...t.parentNode.children].forEach(b=>b.classList.remove("on")); t.classList.add("on"); return; }
@@ -1593,6 +1627,7 @@ document.addEventListener("click", e=>{
     toast("Welcome back, "+found.name);
     return;
   }
+  if (t.id==="d_centremap"){ dCentreMapOnMe(); return; }
   if (t.id==="d_clearerr"){ dSyncError=""; render(); return; }
   if (t.id==="d_retrysync"){
     dSyncStage="starting"; dSyncError=""; dSyncToastShown=false;
@@ -2061,6 +2096,7 @@ function render(){
   renderNow(); renderTabs();
   $("main").innerHTML = view==="kit" ? renderKit() : view==="song" ? renderShanty() : view==="quest" ? renderQuest() : view==="gaunt" ? renderGaunt() : renderDay(view);
   $("editbar").hidden = !editing;
+  if (view==="gaunt") dRestoreMapScroll();
   dScheduleAutoResolve();
 }
 
