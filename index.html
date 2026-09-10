@@ -47,8 +47,8 @@ header{background:var(--ink-deep);border-bottom:1px solid var(--ink-line);paddin
 nav{position:sticky;top:0;z-index:40;background:rgba(10,22,30,.94);backdrop-filter:blur(10px);
     -webkit-backdrop-filter:blur(10px);border-bottom:1px solid var(--ink-line)}
 .tabs{display:flex;max-width:640px;margin:0 auto}
-.tab{flex:1;padding:13px 2px 11px;text-align:center;border-bottom:2px solid transparent;color:var(--kelp);font-size:12.5px;font-weight:600}
-.tab b{display:block;font-weight:700;font-size:15px;color:inherit}
+.tab{flex:1;min-width:0;padding:11px 1px 10px;text-align:center;border-bottom:2px solid transparent;color:var(--kelp);font-size:10.5px;font-weight:600;overflow:hidden}
+.tab b{display:block;font-weight:700;font-size:13px;color:inherit;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .tab.on{color:var(--sand);border-bottom-color:var(--syrup)}
 
 main{padding:18px 0 40px}
@@ -182,6 +182,17 @@ label{display:block;color:var(--kelp);font-size:12.5px;margin-top:12px}
 .wxi{font-size:23px;margin:5px 0}
 .wxt{font-size:14px;font-weight:700;color:var(--sand);margin:0}
 .wxt span{color:var(--kelp);font-weight:400;font-size:12px}
+
+/* ---------- shanty ---------- */
+.shanty{margin-top:10px}
+.shanty .lead{color:var(--sand);font-size:14.5px;margin:10px 0 2px}
+.shanty .lead b{color:var(--kelp);font-weight:700;font-size:12px;text-transform:uppercase;letter-spacing:.02em}
+.shanty .resp{color:var(--syrup);font-size:16px;font-weight:700;margin:0 0 4px 14px}
+.shanty .chorus{background:var(--ink-deep);border:1px solid var(--syrup);border-radius:var(--r);
+  padding:12px 14px;margin:14px 0;font-size:15px;font-weight:700;color:var(--sand);line-height:1.6}
+.shanty .chorus b{display:block;color:var(--syrup);font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.03em;margin-bottom:4px}
+.shanty .chorus.big{border-width:2px;border-color:var(--sunset)}
+.shanty .chorus.big b{color:var(--sunset)}
 
 /* ---------- highlights ---------- */
 .highlights{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:10px}
@@ -1475,7 +1486,8 @@ function renderTabs(){
     + plan.days.map(d=>
     `<button class="tab ${view===d.id?"on":""}" data-tab="${d.id}"><b>${fullDay(d).slice(0,3)}</b>${d.date.slice(-2)}</button>`).join("")
     + `<button class="tab ${view==="quest"?"on":""}" data-tab="quest"><b>Quest</b>game</button>`
-    + `<button class="tab ${view==="kit"?"on":""}" data-tab="kit"><b>Kit</b>list</button>`;
+    + `<button class="tab ${view==="kit"?"on":""}" data-tab="kit"><b>Kit</b>list</button>`
+    + `<button class="tab ${view==="song"?"on":""}" data-tab="song"><b>Song</b>shanty</button>`;
 }
 
 /* ---------- itinerary ---------- */
@@ -1666,6 +1678,55 @@ function renderMvp(){
     </div>`;
 }
 
+function renderShanty(){
+  return `<div class="panel"><h3>⚓ Matty-O</h3>
+    <p>A shanty for the crew — learn it before Friday. One guy leads, everybody roars back the bold line.</p></div>
+  <div class="panel"><div class="shanty">
+      <p class="lead"><b>Leader</b> — Oh we sailed our crew to San Diego town,</p>
+      <p class="resp">Way, hay, Matty-o!</p>
+      <p class="lead"><b>Leader</b> — To give our boy his last go-round,</p>
+      <p class="resp">'Fore he's a married man-o!</p>
+
+      <div class="chorus"><b>CHORUS — everybody</b><br>
+        Heave away, you Phatty crew,<br>
+        Pour the rum and drink on through,<br>
+        We'll walk him home by morning too,<br>
+        Before he says "I do-o!"</div>
+
+      <p class="lead"><b>Leader</b> — We hit the cellar, stormed the pool,</p>
+      <p class="resp">Way, hay, Matty-o!</p>
+      <p class="lead"><b>Leader</b> — Hodad's burgers, breaking rules,</p>
+      <p class="resp">'Fore he's a married man-o!</p>
+
+      <div class="chorus"><b>CHORUS — everybody</b><br>
+        Heave away, you Phatty crew,<br>
+        Pour the rum and drink on through,<br>
+        We'll walk him home by morning too,<br>
+        Before he says "I do-o!"</div>
+
+      <p class="lead"><b>Leader</b> — We climbed the bells, we crawled the bars,</p>
+      <p class="resp">Way, hay, Matty-o!</p>
+      <p class="lead"><b>Leader</b> — Gaslamp lit up like the stars,</p>
+      <p class="resp">'Fore he's a married man-o!</p>
+
+      <div class="chorus"><b>CHORUS — everybody</b><br>
+        Heave away, you Phatty crew,<br>
+        Pour the rum and drink on through,<br>
+        We'll walk him home by morning too,<br>
+        Before he says "I do-o!"</div>
+
+      <p class="lead"><b>Leader</b> — So here's to Matt, and here's to love,</p>
+      <p class="resp">Way, hay, Matty-o!</p>
+      <p class="lead"><b>Leader</b> — The brotherhood's still up above,</p>
+      <p class="resp">'Fore he's a married man-o!</p>
+
+      <div class="chorus big"><b>FINAL CHORUS — arms around shoulders</b><br>
+        Heave away, you Phatty crew,<br>
+        Pour the rum and drink on through,<br>
+        We'll walk him home by morning too,<br>
+        Before he says — <b>"I DO!"</b></div>
+  </div></div>`;
+}
 function renderKit(){
   const decided=[];
   plan.days.forEach(d=>d.items.forEach(i=>{ if(i.options&&i.options.length)
@@ -1699,7 +1760,7 @@ function renderKit(){
 function render(){
   plan.kit = plan.kit.map(x=>typeof x==="string"?{text:x,done:false}:x);
   renderNow(); renderTabs();
-  $("main").innerHTML = view==="kit" ? renderKit() : view==="quest" ? renderQuest() : view==="gaunt" ? renderGaunt() : renderDay(view);
+  $("main").innerHTML = view==="kit" ? renderKit() : view==="song" ? renderShanty() : view==="quest" ? renderQuest() : view==="gaunt" ? renderGaunt() : renderDay(view);
   $("editbar").hidden = !editing;
   dScheduleAutoResolve();
 }
