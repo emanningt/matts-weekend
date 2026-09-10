@@ -171,6 +171,12 @@ label{display:block;color:var(--kelp);font-size:12.5px;margin-top:12px}
 .wxt{font-size:14px;font-weight:700;color:var(--sand);margin:0}
 .wxt span{color:var(--kelp);font-weight:400;font-size:12px}
 
+/* ---------- highlights ---------- */
+.highlights{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:10px}
+.hitem img{width:100%;aspect-ratio:1;object-fit:cover;border-radius:8px;display:block;border:1px solid var(--ink-line)}
+.hitem p{font-size:11.5px;color:var(--kelp);margin:6px 0 0;line-height:1.35}
+.hitem p b{color:var(--sand)}
+
 .editbar{position:sticky;bottom:0;z-index:45;background:rgba(10,22,30,.95);backdrop-filter:blur(10px);
          border-top:1px solid var(--ink-line);padding:10px 16px calc(10px + env(safe-area-inset-bottom))}
 .editbar .in{max-width:640px;margin:0 auto;display:flex;gap:10px;align-items:center}
@@ -380,17 +386,54 @@ const DECK = {
   ]
 };
 
-let me = loadMe(), game = null, syncOn = false, fbRef = null, dRef = null;
+let me = loadMe(), game = null, syncOn = false, fbRef = null, dRef = null, pRef = null;
 function loadMe(){ try{ const r=store.getItem(MKEY); if(r) return JSON.parse(r); }catch(e){} 
   const m={id:uid()}; store.setItem(MKEY,JSON.stringify(m)); return m; }
 function saveMe(){ store.setItem(MKEY,JSON.stringify(me)); }
-function newGame(){ return {started:false, players:[], turn:0, log:[], card:null, roll:null, v:1}; }
+function newGame(){ return {started:false, players:[], turn:0, log:[], card:null, roll:null, decks:{}, v:1}; }
 function loadGame(){ try{ const r=store.getItem(GKEY); if(r) return JSON.parse(r); }catch(e){} return newGame(); }
 function saveGame(){
   try{ store.setItem(GKEY, JSON.stringify(game)); }catch(e){}
   if (syncOn && fbRef) fbRef.set(game);
 }
 game = loadGame();
+
+/* ---- draw from a shuffled pile instead of pure random — guarantees no repeat
+   until the whole deck's been seen once, same trick as the Gauntlet's modifier deck ---- */
+function shuffleG(a){ for(let i=a.length-1;i>0;i--){ const j=Math.floor(Math.random()*(i+1)); [a[i],a[j]]=[a[j],a[i]]; } return a; }
+function drawCard(kind){
+  game.decks = game.decks || {};
+  if (!game.decks[kind] || !game.decks[kind].length) game.decks[kind] = shuffleG(DECK[kind].map((_,i)=>i));
+  return DECK[kind][game.decks[kind].pop()];
+}
+
+/* ---- highlights: photos live on their own Firebase path so a growing photo
+   collection doesn't get re-sent to every phone on every single dice roll ---- */
+const PHKEY = "azsd.photos";
+let photos = loadPhotos();
+function loadPhotos(){ try{ const r=store.getItem(PHKEY); if(r) return JSON.parse(r); }catch(e){} return []; }
+function savePhotos(){
+  try{ store.setItem(PHKEY, JSON.stringify(photos)); }catch(e){}
+  if (syncOn && pRef) pRef.set(photos);
+}
+function compressImage(file){
+  return new Promise((resolve,reject)=>{
+    const reader = new FileReader();
+    reader.onload = e=>{
+      const img = new Image();
+      img.onload = ()=>{
+        const maxDim = 720; let w=img.width, h=img.height;
+        if (w>h && w>maxDim){ h=Math.round(h*maxDim/w); w=maxDim; }
+        else if (h>=w && h>maxDim){ w=Math.round(w*maxDim/h); h=maxDim; }
+        const cv = document.createElement("canvas"); cv.width=w; cv.height=h;
+        cv.getContext("2d").drawImage(img,0,0,w,h);
+        resolve(cv.toDataURL("image/jpeg",0.55));
+      };
+      img.onerror = reject; img.src = e.target.result;
+    };
+    reader.onerror = reject; reader.readAsDataURL(file);
+  });
+}
 
 /* Firebase — both games share one project, different paths so they never collide:
    games/{ROOM}/quest   -> the board game
@@ -404,6 +447,7 @@ function initSync(){
       firebase.initializeApp(FIREBASE_CONFIG);
       fbRef = firebase.database().ref("games/"+ROOM+"/quest");
       dRef  = firebase.database().ref("games/"+ROOM+"/dungeon");
+      pRef  = firebase.database().ref("games/"+ROOM+"/photos");
       syncOn = true;
       fbRef.on("value", snap => {
         const v = snap.val();
@@ -416,6 +460,11 @@ function initSync(){
         if (v){ dungeon = v; dungeon.players = dungeon.players || []; dungeon.log = dungeon.log || []; }
         else { dRef.set(dungeon); }
         if (view==="gaunt" && !dBusy) render();
+      });
+      pRef.on("value", snap => {
+        const v = snap.val();
+        if (v) photos = v; else if (photos.length) pRef.set(photos);
+        if (view==="quest") render();
       });
     })
     .catch(()=>toast("Live sync did not load — running on this phone only"));
@@ -439,6 +488,7 @@ function rollTurn(){
   if (p.fin){ endTurn(); saveGame(); render(); return; }
   if (p.skip){ p.skip=false; logIt(`<b>${esc(p.name)}</b> sat this one out`); endTurn(); saveGame(); render(); return; }
   const d20 = 1 + Math.floor(Math.random()*20);
+  p.bestRoll = Math.max(p.bestRoll||0, d20);
   const move = Math.max(1, Math.ceil(d20/4));
   p.pos = Math.min(TRACK.length-1, p.pos + move);
   game.roll = d20;
@@ -446,15 +496,16 @@ function rollTurn(){
   logIt(`<b>${esc(p.name)}</b> rolled ${d20} and moved to ${esc(tile.n)}`);
 
   if (tile.t==="quest" || tile.t==="boss"){
-    const deck = DECK[tile.t];
-    game.card = Object.assign({}, deck[Math.floor(Math.random()*deck.length)], {kind:tile.t, by:p.id, tile:tile.n});
+    const c = drawCard(tile.t);
+    game.card = Object.assign({}, c, {kind:tile.t, by:p.id, tile:tile.n});
   } else if (tile.t==="tavern"){
-    const c = DECK.tavern[Math.floor(Math.random()*DECK.tavern.length)];
+    const c = drawCard("tavern");
     game.card = Object.assign({}, c, {kind:"tavern", by:p.id, tile:tile.n});
   } else if (tile.t==="trap"){
-    const c = DECK.trap[Math.floor(Math.random()*DECK.trap.length)];
+    const c = drawCard("trap");
     p.gold = Math.max(0, p.gold + (c.g||0));
     if (c.skip) p.skip = true;
+    p.trapHits = (p.trapHits||0)+1;
     logIt(`${esc(c.t)}`);
     game.card = null; endTurn(); saveGame(); render(); return;
   } else if (tile.t==="finish"){
@@ -463,24 +514,85 @@ function rollTurn(){
   } else { game.card=null; endTurn(); }
   saveGame(); render();
 }
-function resolveCard(ok){
+function resolveCard(ok, photo){
   const c = game.card; if(!c) return;
   const p = game.players.find(x=>x.id===c.by); if(!p) return;
   if (c.kind==="tavern"){
     p.gold += c.g; p.xp += 2;
+    if (ok) p.tavernRounds = (p.tavernRounds||0)+1;
     logIt(`<b>${esc(p.name)}</b> ${ok?"paid up":"skipped it"} at ${esc(c.tile)}`);
     if (!ok){ p.gold -= c.g; }
   } else {
+    if (!ok) p.chickenOuts = (p.chickenOuts||0)+1;
     const d20 = 1+Math.floor(Math.random()*20);
     const total = d20 + stat(p, c.s||"luck");
     const win = ok && total >= (c.dc||12);
-    if (win){ p.xp += 5; p.gold += 2; logIt(`<b>${esc(p.name)}</b> pulled it off — rolled ${total} vs ${c.dc}. +5 XP`); }
+    if (win){ p.xp += 5; p.gold += 2; p.questWins = (p.questWins||0)+1; logIt(`<b>${esc(p.name)}</b> pulled it off — rolled ${total} vs ${c.dc}. +5 XP`); }
     else if (ok){ p.xp += 2; logIt(`<b>${esc(p.name)}</b> did it but rolled ${total} vs ${c.dc}. +2 XP for effort`); }
     else { p.gold = Math.max(0,p.gold-2); logIt(`<b>${esc(p.name)}</b> backed out. -2 gold`); }
+    if (ok && photo){
+      photos.unshift({id:uid(), name:p.name, av:p.av, text:c.t, dataUrl:photo, at:Date.now()});
+      if (photos.length>150) photos = photos.slice(0,150);
+      savePhotos();
+      logIt(`<b>${esc(p.name)}</b> added a photo to the highlights`);
+    }
   }
   game.card=null; endTurn(); saveGame(); render();
 }
 function endTurn(){ if (game.players.length) game.turn = (game.turn+1) % game.players.length; game.roll=null; }
+
+/* ---- weekend awards — live standings, doubles as the end-of-weekend recap by Sunday ---- */
+function computeAwards(){
+  const ps = game.players; if (!ps.length) return [];
+  const pick = (key,label,fmt) => {
+    const withVal = ps.filter(p=>(p[key]||0)>0); if (!withVal.length) return null;
+    const top = withVal.reduce((a,b)=>(b[key]||0)>(a[key]||0)?b:a);
+    return {label, name:top.name, detail:fmt(top[key]||0)};
+  };
+  const awards = [];
+  [ pick("trapHits","Most Cursed", v=>`${v} trap${v===1?"":"s"} hit`),
+    pick("tavernRounds","Best Wingman", v=>`${v} round${v===1?"":"s"} bought`),
+    pick("bestRoll","Luckiest Roll", v=>`rolled a ${v}`),
+    pick("chickenOuts","Biggest Chicken", v=>`backed out ${v} time${v===1?"":"s"}`),
+    pick("questWins","Quest Champion", v=>`${v} quest${v===1?"":"s"} pulled off`)
+  ].forEach(a=>{ if(a) awards.push(a); });
+  const richest = ps.slice().sort((a,b)=>(b.gold||0)-(a.gold||0))[0];
+  if (richest && richest.gold>0) awards.push({label:"High Roller", name:richest.name, detail:`${richest.gold} gold`});
+  return awards;
+}
+function renderAwards(){
+  const awards = computeAwards(); if (!awards.length) return "";
+  return `<div class="panel"><h3>🏆 Weekend Awards</h3>
+    ${awards.map(a=>`<div class="lb"><span class="nm">${esc(a.label)}<small>${esc(a.detail)}</small></span><span class="sc">${esc(a.name)}</span></div>`).join("")}
+    </div>`;
+}
+function renderHighlights(){
+  if (!photos.length) return `<div class="panel"><h3>📸 Highlights</h3><p>Photos from confirmed quests will show up here.</p></div>`;
+  return `<div class="panel"><h3>📸 Highlights</h3>
+    <div class="highlights">${photos.slice(0,12).map(ph=>
+      `<div class="hitem"><img src="${ph.dataUrl}" alt=""><p>${esc(ph.av||"")} <b>${esc(ph.name)}</b><br><span>${esc(ph.text)}</span></p></div>`).join("")}</div>
+    ${photos.length>12?`<p class="note">+${photos.length-12} more from the weekend.</p>`:""}
+    <div class="acts"><button class="btn ghost" id="clearphotos">Clear highlights</button></div></div>`;
+}
+function showPhotoPrompt(){
+  sheet(`<h3>Got proof?</h3>
+    <p style="color:var(--kelp);font-size:14px;margin-top:8px">Snap a photo — it'll go in the weekend highlights. Totally optional.</p>
+    <input type="file" accept="image/*" capture="environment" id="qphoto" style="margin-top:12px">
+    <div id="qphoto_prev"></div>
+    <div class="row"><button class="btn ghost" id="qphoto_skip">Skip</button><button class="btn go" id="qphoto_go" disabled>Attach & confirm</button></div>`);
+  let picked = null;
+  $("qphoto").addEventListener("change", async e=>{
+    const f = e.target.files[0]; if(!f) return;
+    toast("Compressing photo…");
+    try{
+      picked = await compressImage(f);
+      $("qphoto_prev").innerHTML = `<img src="${picked}" style="width:100%;border-radius:8px;margin-top:10px">`;
+      $("qphoto_go").disabled = false;
+    }catch(err){ toast("Couldn't read that photo"); }
+  });
+  $("qphoto_skip").onclick = ()=>{ closeSheet(); resolveCard(1, null); };
+  $("qphoto_go").onclick = ()=>{ closeSheet(); resolveCard(1, picked); };
+}
 
 /* ================================================================
    THE GROOM'S GAUNTLET — a small Gloomhaven-style card combat game.
@@ -1258,6 +1370,9 @@ function renderQuest(){
         <span class="nm">${esc(pl.name)}${pl.id===me.id?" (you)":""}<small>${CLASSES[pl.cls].n} · ${pl.gold} gold · tile ${pl.pos}</small></span>
         <span class="sc">${pl.xp} XP</span></div>`).join("") + `</div>`;
 
+  h += renderAwards();
+  h += renderHighlights();
+
   h += `<div class="panel"><h3>What happened</h3>` +
     (game.log.length ? game.log.slice(0,12).map(l=>`<div class="log">${l.t}</div>`).join("")
                      : `<p>Nothing yet. Roll to start the story.</p>`) + `</div>`;
@@ -1374,7 +1489,7 @@ function render(){
 
 /* ---------- events ---------- */
 document.addEventListener("click", e=>{
-  const t = e.target.closest("[data-tab],[data-open],[data-pick],[data-done],[data-edit],[data-add],[data-up],[data-down],[data-copy],[data-kit],[data-cls],[data-av],[data-res],#addkit,#copyplan,#resetplan,#editoff,#roll,#j_go,#resetgame");
+  const t = e.target.closest("[data-tab],[data-open],[data-pick],[data-done],[data-edit],[data-add],[data-up],[data-down],[data-copy],[data-kit],[data-cls],[data-av],[data-res],#addkit,#copyplan,#resetplan,#editoff,#roll,#j_go,#resetgame,#clearphotos");
   if (!t) return; const g = n=>t.getAttribute(n);
 
   if (g("data-tab")){ view=g("data-tab"); open=null; render(); window.scrollTo({top:0,behavior:"smooth"}); return; }
@@ -1408,7 +1523,12 @@ document.addEventListener("click", e=>{
     joinGame(name, cls, av); toast("You're in"); return;
   }
   if (t.id==="roll"){ rollTurn(); return; }
-  if (g("data-res")){ resolveCard(g("data-res")==="1"); return; }
+  if (g("data-res")){
+    const ok = g("data-res")==="1";
+    if (ok && game.card && (game.card.kind==="quest" || game.card.kind==="boss")){ showPhotoPrompt(); return; }
+    resolveCard(ok); return;
+  }
+  if (t.id==="clearphotos"){ if(confirm("Clear all the highlight photos? This can't be undone.")){ photos=[]; savePhotos(); render(); } return; }
   if (t.id==="resetgame"){ if(confirm("Start a new quest? Characters are wiped.")){ game=newGame(); saveGame(); render(); } return; }
 });
 document.addEventListener("input", e=>{
