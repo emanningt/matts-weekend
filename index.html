@@ -849,13 +849,13 @@ function hexPatternDef(){
 function dRenderMap(scn, highlight){
   highlight = highlight || {};
   const pos = dLayoutZones(scn);
-  const colW=168, rowH=126, pad=24, topPad=10;
+  const colW=168, rowH=138, pad=24, topPad=10;
   const maxCol = Math.max(...Object.values(pos).map(p=>p.col));
   const maxRows = Math.max(...Object.values(pos).map(p=>p.rowsInCol));
   const w = pad*2 + (maxCol+1)*colW, h = pad*2 + topPad + maxRows*rowH;
   const center = z => { const p=pos[z]; const x=pad+p.col*colW+colW/2;
     const totalH=p.rowsInCol*rowH; const y=topPad+(h-topPad-totalH)/2+rowH/2+p.row*rowH; return {x,y}; };
-  const rw=142, rh=104;
+  const rw=142, rh=116;
 
   /* corridors — stone passage with a door plate at the midpoint */
   const seenEdge=new Set(); let edges="";
@@ -872,12 +872,20 @@ function dRenderMap(scn, highlight){
       </g>`;
   }));
 
+  /* a small health bar floating just above a token — the one piece of UI that used
+     to live in a separate bulky list is now read straight off the board instead */
+  const hpBar = (cx, topY, wpx, pct) => {
+    const color = pct<=0 ? "#555" : pct<30 ? "var(--sunset)" : pct<65 ? "var(--syrup)" : "var(--go)";
+    return `<rect x="${cx-wpx/2}" y="${topY}" width="${wpx}" height="3.5" rx="1.75" style="fill:#00000070"/>
+      <rect x="${cx-wpx/2}" y="${topY}" width="${wpx*Math.max(0,Math.min(100,pct))/100}" height="3.5" rx="1.75" style="fill:${color}"/>`;
+  };
+
   const mine = myDP();
   let nodes="";
   scn.zones.forEach((name,z)=>{
     const c=center(z);
     const hereM = dungeon.monsters.filter(m=>m.alive && m.zone===z);
-    const hereP = dungeon.players.filter(p=>!p.ko && p.zone===z);
+    const hereP = dungeon.players.filter(p=>p.zone===z); // includes KO'd — the map is now the single source of truth
     const isMine = mine && mine.zone===z;
     const hl = highlight[z];
     const stroke = hl==="go" ? "var(--go)" : hl==="atk" ? "var(--sunset)" : isMine ? "var(--syrup)" : "#3A5468";
@@ -885,36 +893,47 @@ function dRenderMap(scn, highlight){
     const clipId = "clip"+scn.id+"_"+z;
     const glow = (hl || isMine) ? `<rect x="${c.x-rw/2-5}" y="${c.y-rh/2-5}" width="${rw+10}" height="${rh+10}" rx="7" style="fill:none;stroke:${stroke};stroke-width:1.5;opacity:.35"/>` : "";
 
-    /* monsters as standees — bosses get a bigger gold-ringed base */
+    /* monsters as standees, each with its own HP bar overhead — bosses get a bigger gold-ringed base */
     let monRow = "";
     if (hereM.length){
       const shown = hereM.slice(0,4);
       shown.forEach((m,i)=>{
         const mx = c.x - ((shown.length-1)*24)/2 + i*24;
-        const my = c.y+2;
+        const my = c.y-14;
         const r = m.boss ? 14 : 11.5;
         const ring = m.boss ? "var(--syrup)" : "var(--sunset)";
         const rw2 = m.boss ? 2.4 : 1.6;
+        const pct = Math.round(100*m.hp/m.maxHp);
+        monRow += hpBar(mx, my-r-7, r*1.7, pct);
         monRow += `<ellipse cx="${mx}" cy="${my+r}" rx="${r-1}" ry="3.5" style="fill:#00000055"/>
           <circle cx="${mx}" cy="${my}" r="${r}" style="fill:#4A2019;stroke:${ring};stroke-width:${rw2}"/>
           <text x="${mx}" y="${my+5}" text-anchor="middle" style="font-size:${m.boss?16:13}px">${monIconOf(m.name)}</text>`;
       });
-      if (hereM.length>4) monRow += `<text x="${c.x+56}" y="${c.y+7}" text-anchor="middle" style="font:700 10px Inter,sans-serif;fill:var(--sunset)">+${hereM.length-4}</text>`;
+      if (hereM.length>4) monRow += `<text x="${c.x+56}" y="${c.y-9}" text-anchor="middle" style="font:700 10px Inter,sans-serif;fill:var(--sunset)">+${hereM.length-4}</text>`;
     }
-    /* players as class-colored standees, names on a plate underneath */
+    /* players as class-colored standees with their own HP bar — KO'd ones stay visible, just grayed out */
     let playRow = "", nameLine = "";
     if (hereP.length){
       const shown = hereP.slice(0,4);
       shown.forEach((p,i)=>{
         const st = DCLASS_STYLE[p.cls];
         const px = c.x - ((shown.length-1)*24)/2 + i*24;
-        const py = c.y+30;
-        playRow += `<ellipse cx="${px}" cy="${py+10}" rx="10" ry="3.5" style="fill:#00000055"/>
-          <circle cx="${px}" cy="${py}" r="11" style="fill:${st.color};stroke:#0A161E;stroke-width:1.6"/>
-          <text x="${px}" y="${py+4}" text-anchor="middle" style="font-size:11px">${st.icon}</text>`;
+        const py = c.y+26;
+        const r = 11;
+        if (p.ko){
+          playRow += `<ellipse cx="${px}" cy="${py+r-1}" rx="${r-1}" ry="3.5" style="fill:#00000055"/>
+            <circle cx="${px}" cy="${py}" r="${r}" style="fill:#2A2E33;stroke:#5A6470;stroke-width:1.6;opacity:.75"/>
+            <text x="${px}" y="${py+4}" text-anchor="middle" style="font-size:11px;opacity:.6">💀</text>`;
+        } else {
+          const pct = Math.round(100*p.hp/dMaxHp(p));
+          playRow += hpBar(px, py-r-7, r*1.7, pct);
+          playRow += `<ellipse cx="${px}" cy="${py+r-1}" rx="${r-1}" ry="3.5" style="fill:#00000055"/>
+            <circle cx="${px}" cy="${py}" r="${r}" style="fill:${st.color};stroke:#0A161E;stroke-width:1.6"/>
+            <text x="${px}" y="${py+4}" text-anchor="middle" style="font-size:11px">${st.icon}</text>`;
+        }
       });
-      nameLine = hereP.map(p=>esc(p.name.slice(0,4))).join(" · ");
-      if (nameLine.length>22) nameLine = nameLine.slice(0,20)+"…";
+      nameLine = hereP.map(p=>esc(p.name.slice(0,4))+(p.ko?"✝":"")).join(" · ");
+      if (nameLine.length>24) nameLine = nameLine.slice(0,22)+"…";
     }
 
     nodes += `<g>${glow}
@@ -926,7 +945,7 @@ function dRenderMap(scn, highlight){
       <text x="${c.x-rw/2+25}" y="${c.y-rh/2+13.5}" style="font:700 11px Inter,sans-serif;fill:var(--sand)">${esc(name)}</text>
       ${monRow}${playRow}
       ${nameLine?`<rect x="${c.x-rw/2}" y="${c.y+rh/2-15}" width="${rw}" height="15" style="fill:#0F2431;opacity:.92" clip-path="url(#${clipId})"/>
-        <text x="${c.x}" y="${c.y+rh/2-4.5}" text-anchor="middle" style="font:700 10px Inter,sans-serif;fill:var(--go)">${esc(nameLine)}</text>`:""}
+        <text x="${c.x}" y="${c.y+rh/2-4.5}" text-anchor="middle" style="font:700 9.5px Inter,sans-serif;fill:var(--go)">${esc(nameLine)}</text>`:""}
     </g>`;
   });
 
@@ -1195,16 +1214,6 @@ function dRenderBattle(mine){
   let h = dPhaseBanner();
   h += `<div class="panel"><h3>${esc(scn.name)}</h3><p>Round ${dungeon.round}</p></div>`;
   h += dRenderMap(scn);
-  h += `<div class="panel"><h3>Monsters</h3>` + dungeon.monsters.map(m=>{
-    const pct = Math.max(0,Math.round(100*m.hp/m.maxHp));
-    return `<div class="mcard ${m.alive?"":"dead"}"><div class="mn"><span>${esc(m.name)}<small> · ${esc(scn.zones[m.zone])}</small></span><span>${m.alive?m.hp+"/"+m.maxHp:"defeated"}</span></div>
-      ${m.alive?`<div class="hpbar ${pct<30?"low":""}"><i style="width:${pct}%"></i></div>`:""}</div>`;
-  }).join("") + `</div>`;
-  h += `<div class="panel"><h3>Party</h3>` + dungeon.players.map(p=>{
-    const pct = Math.max(0,Math.round(100*p.hp/dMaxHp(p)));
-    return `<div class="mcard ${p.ko?"dead":""}"><div class="mn"><span>${esc(p.name)}<small> · ${esc(scn.zones[p.zone])} · ${DCLASSES[p.cls].n}</small></span><span>${p.ko?"down":p.hp+"/"+dMaxHp(p)}</span></div>
-      ${!p.ko?`<div class="hpbar ${pct<30?"low":""}"><i style="width:${pct}%"></i></div>`:""}</div>`;
-  }).join("") + `</div>`;
 
   if (dungeon.sub==="selecting") h += dRenderSelecting(mine);
   else { h += dOrderList(); h += dRenderResolving(mine); }
