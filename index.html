@@ -46,6 +46,9 @@ header{background:var(--ink-deep);border-bottom:1px solid var(--ink-line);paddin
   display:flex;align-items:center;justify-content:center;z-index:5}
 .songbtn .ic-play{margin-left:2px}
 .songbtn:active{transform:scale(.94)}
+.refreshbtn{top:calc(env(safe-area-inset-top) + 56px);opacity:.75;border-color:var(--kelp)}
+.refreshbtn.spinning svg{animation:spin .6s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
 @media (prefers-reduced-motion:no-preference){
   .songbtn.playing{animation:songpulse 1.8s ease-out infinite}
 }
@@ -254,6 +257,9 @@ label{display:block;color:var(--kelp);font-size:12.5px;margin-top:12px}
     <button id="songToggle" class="songbtn" type="button" aria-label="Play bachelor party song" aria-pressed="false">
       <svg class="ic-play" viewBox="0 0 24 24" width="17" height="17" aria-hidden="true"><path d="M8 5v14l11-7z" fill="currentColor"/></svg>
       <svg class="ic-pause" viewBox="0 0 24 24" width="17" height="17" aria-hidden="true" style="display:none"><path d="M6 5h4v14H6zM14 5h4v14h-4z" fill="currentColor"/></svg>
+    </button>
+    <button id="forceupdate" class="songbtn refreshbtn" type="button" aria-label="Refresh app">
+      <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path fill="currentColor" d="M17.65 6.35A7.958 7.958 0 0 0 12 4a8 8 0 1 0 7.75 10h-2.09A6 6 0 1 1 12 6c1.66 0 3.14.69 4.22 1.78L13 11h7V4z"/></svg>
     </button>
     <audio id="bachelorSong" preload="none" src="Before_He_Says_I_Do.mp3"></audio>
     <h1 class="mark"><span>AddyZaddy</span><span class="l2">SyrupDaddy</span><span class="l3">Phatty Weekend</span></h1>
@@ -2235,7 +2241,7 @@ function render(){
 
 /* ---------- events ---------- */
 document.addEventListener("click", e=>{
-  const t = e.target.closest("[data-tab],[data-open],[data-pick],[data-done],[data-edit],[data-add],[data-up],[data-down],[data-copy],[data-kit],[data-cls],[data-av],[data-res],#addkit,#copyplan,#resetplan,#editoff,#roll,#j_go,#resetgame,#clearphotos,#d_applyupdate");
+  const t = e.target.closest("[data-tab],[data-open],[data-pick],[data-done],[data-edit],[data-add],[data-up],[data-down],[data-copy],[data-kit],[data-cls],[data-av],[data-res],#addkit,#copyplan,#resetplan,#editoff,#roll,#j_go,#resetgame,#clearphotos,#d_applyupdate,#forceupdate");
   if (!t) return; const g = n=>t.getAttribute(n);
 
   if (t.id==="d_applyupdate"){ dApplyUpdate(); return; }
@@ -2254,14 +2260,9 @@ document.addEventListener("click", e=>{
     if (to>=0&&to<d.items.length){ const [m]=d.items.splice(idx,1); d.items.splice(to,0,m); savePlan(); render(); } return; }
   if (g("data-kit")){ plan.kit[+g("data-kit")].done = !plan.kit[+g("data-kit")].done; savePlan(); render(); return; }
   if (t.id==="forceupdate"){
-    /* A home-screen app has no address bar and no reload button, and iOS caches it
-       hard. Reloading with a fresh query string makes it a URL the cache has never
-       seen, which is the reliable way to pull down new code. */
+    t.classList.add("spinning");
     toast("Fetching the latest…");
-    setTimeout(()=>{
-      const base = location.href.split("?")[0].split("#")[0];
-      location.replace(base + "?u=" + Date.now());
-    }, 400);
+    setTimeout(dApplyUpdate, 400);
     return;
   }
   if (t.id==="addkit"){ const v=prompt("Add to the store list"); if(v){ plan.kit.push({text:v,done:false}); savePlan(); render(); } return; }
