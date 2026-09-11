@@ -47,6 +47,19 @@ header{background:var(--ink-deep);border-bottom:1px solid var(--ink-line);paddin
 .songbtn .ic-play{margin-left:2px}
 .songbtn:active{transform:scale(.94)}
 .refreshbtn{top:calc(env(safe-area-inset-top) + 56px);opacity:.75;border-color:var(--kelp)}
+.plusbtn{top:calc(env(safe-area-inset-top) + 108px);border-color:var(--syrup)}
+.strip{margin-top:14px}
+.strip .striphead{display:flex;align-items:center;justify-content:space-between;margin-bottom:7px}
+.strip .striplab{color:var(--kelp);font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em}
+.strip .stripall{color:var(--syrup);font-size:12px;font-weight:600}
+.striprow{display:flex;gap:8px;overflow-x:auto;-webkit-overflow-scrolling:touch;
+  scroll-snap-type:x mandatory;padding-bottom:2px}
+.striprow::-webkit-scrollbar{display:none}
+.stripitem{flex:0 0 auto;scroll-snap-align:start;position:relative;width:88px}
+.stripitem img{width:88px;height:88px;object-fit:cover;border-radius:8px;display:block;
+  border:1px solid var(--ink-line);background:var(--ink)}
+.stripitem span{display:block;color:var(--kelp);font-size:10.5px;margin-top:4px;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .refreshbtn.spinning svg{animation:spin .6s linear infinite}
 @keyframes spin{to{transform:rotate(360deg)}}
 @media (prefers-reduced-motion:no-preference){
@@ -227,6 +240,18 @@ label{display:block;color:var(--kelp);font-size:12.5px;margin-top:12px}
 .shanty .chorus b{display:block;color:var(--syrup);font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.03em;margin-bottom:4px}
 .shanty .chorus.big{border-width:2px;border-color:var(--sunset)}
 .shanty .chorus.big b{color:var(--sunset)}
+.krow{display:flex;align-items:center;justify-content:space-between;margin-bottom:2px}
+.kclose{width:32px;height:32px;border-radius:50%;background:var(--ink);border:1px solid var(--ink-line);
+  color:var(--kelp);display:flex;align-items:center;justify-content:center;font-size:15px;flex-shrink:0}
+.karaoke{max-height:52vh;overflow-y:auto;margin-top:6px;padding-right:2px}
+.klabel{color:var(--sunset);font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;
+  margin:18px 0 4px;padding-top:10px;border-top:1px dashed var(--ink-line)}
+.klabel:first-child{margin-top:0;padding-top:0;border-top:none}
+.kline{color:var(--kelp);font-size:15px;margin:5px 0;padding:4px 8px;border-radius:6px;
+  transition:color .2s,background-color .2s,transform .2s}
+.kline.k-resp{font-weight:700}
+.kline.active{color:var(--sand);background:var(--ink);font-weight:700;transform:scale(1.02)}
+.kline.k-resp.active{color:var(--syrup)}
 
 /* ---------- highlights ---------- */
 .highlights{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:10px}
@@ -261,11 +286,15 @@ label{display:block;color:var(--kelp);font-size:12.5px;margin-top:12px}
     <button id="forceupdate" class="songbtn refreshbtn" type="button" aria-label="Refresh app">
       <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path fill="currentColor" d="M17.65 6.35A7.958 7.958 0 0 0 12 4a8 8 0 1 0 7.75 10h-2.09A6 6 0 1 1 12 6c1.66 0 3.14.69 4.22 1.78L13 11h7V4z"/></svg>
     </button>
+    <button id="addphotohdr" class="songbtn plusbtn" type="button" aria-label="Add a photo">
+      <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path fill="currentColor" d="M11 5h2v6h6v2h-6v6h-2v-6H5v-2h6z"/></svg>
+    </button>
     <audio id="bachelorSong" preload="none" src="Before_He_Says_I_Do.mp3"></audio>
     <h1 class="mark"><span>AddyZaddy</span><span class="l2">SyrupDaddy</span><span class="l3">Phatty Weekend</span></h1>
     <p class="dates">September 11–13, 2026 · San Diego</p>
     <p class="countdown" id="countdown"></p>
     <div class="now" id="now"></div>
+    <div class="strip" id="photostrip" hidden></div>
   </div>
 </header>
 
@@ -533,6 +562,7 @@ function loadPhotos(){ try{ const r=store.getItem(PHKEY); if(r) return JSON.pars
 function savePhotos(){
   try{ store.setItem(PHKEY, JSON.stringify(photos)); }catch(e){}
   fbWrite(pRef, photos, "Photos");
+  renderPhotoStrip();
 }
 function compressImage(file){
   return new Promise((resolve,reject)=>{
@@ -628,6 +658,7 @@ function initSync(){
         pRef.on("value", snap => {
           const v = snap.val();
           if (v) photos = v; else if (photos.length) pRef.set(fbSafe(photos));
+          renderPhotoStrip();
           if (view==="quest") render();
         });
       })
@@ -744,12 +775,47 @@ function renderAwards(){
     </div>`;
 }
 function renderHighlights(){
-  if (!photos.length) return `<div class="panel"><h3>📸 Highlights</h3><p>Photos from confirmed quests will show up here.</p></div>`;
+  const addBtn = `<button class="btn go" id="addphoto">📸 Add a photo</button>`;
+  if (!photos.length) return `<div class="panel"><h3>📸 Highlights</h3>
+    <p>Add the weekend's best moments here — everyone in the room sees them live.</p>
+    <div class="acts">${addBtn}</div></div>`;
   return `<div class="panel"><h3>📸 Highlights</h3>
     <div class="highlights">${photos.slice(0,12).map(ph=>
       `<div class="hitem"><img src="${ph.dataUrl}" alt=""><p>${esc(ph.av||"")} <b>${esc(ph.name)}</b><br><span>${esc(ph.text)}</span></p></div>`).join("")}</div>
     ${photos.length>12?`<p class="note">+${photos.length-12} more from the weekend.</p>`:""}
-    <div class="acts"><button class="btn ghost" id="clearphotos">Clear highlights</button></div></div>`;
+    <div class="acts">${addBtn}<button class="btn ghost" id="clearphotos">Clear highlights</button></div></div>`;
+}
+function showStandalonePhotoPrompt(){
+  sheet(`<h3>Add a photo</h3>
+    <p style="color:var(--kelp);font-size:14px;margin-top:8px">Goes straight into the highlights for everyone to see.</p>
+    <input type="file" accept="image/*" capture="environment" id="hphoto" style="margin-top:12px">
+    <div id="hphoto_prev"></div>
+    <label for="hphoto_name" style="margin-top:12px">Your name</label>
+    <input id="hphoto_name" value="${esc(me.name||"")}" placeholder="Your name">
+    <label for="hphoto_cap">Caption <small style="color:var(--kelp);font-weight:400">(optional)</small></label>
+    <input id="hphoto_cap" placeholder="What's happening here?">
+    <div class="row" style="margin-top:14px"><button class="btn ghost" id="hphoto_cancel">Cancel</button><button class="btn go" id="hphoto_go" disabled>Post it</button></div>`);
+  let picked = null;
+  $("hphoto").addEventListener("change", async e=>{
+    const f = e.target.files[0]; if(!f) return;
+    toast("Compressing photo…");
+    try{
+      picked = await compressImage(f);
+      $("hphoto_prev").innerHTML = `<img src="${picked}" style="width:100%;border-radius:8px;margin-top:10px">`;
+      $("hphoto_go").disabled = false;
+    }catch(err){ toast("Couldn't read that photo"); }
+  });
+  $("hphoto_cancel").onclick = closeSheet;
+  $("hphoto_go").onclick = ()=>{
+    const name = ($("hphoto_name").value||"").trim() || "Someone";
+    const cap = ($("hphoto_cap").value||"").trim();
+    me.name = name; saveMe();
+    photos.unshift({id:uid(), name, av:"📸", text:cap, dataUrl:picked, at:Date.now()});
+    if (photos.length>150) photos = photos.slice(0,150);
+    savePhotos();
+    logIt(`<b>${esc(name)}</b> added a photo to the highlights`);
+    closeSheet(); render();
+  };
 }
 function showPhotoPrompt(){
   sheet(`<h3>Got proof?</h3>
@@ -2209,6 +2275,10 @@ function renderKit(){
     <div class="acts"><a class="btn go" href="${maps(plan.hq.q)}">Open in Maps</a>
     <button class="btn ghost" data-copy="${esc(plan.hq.addr)}">Copy address</button></div></div>
 
+  <div class="panel"><h3>📷 Weekend photo album</h3>
+    <p>Full-resolution photos, backed up automatically — join once and anything anyone adds shows up in everyone's Photos app.</p>
+    <div class="acts"><a class="btn go" href="https://photos.icloud.com/shared/album/0afjV1gVDO3f67ven30YsQXeg" target="_blank" rel="noopener">Join the iCloud album</a></div></div>
+
   <div class="panel"><h3>Nobody gets left behind</h3>
     <p>Write the ride-back plan before Saturday night. Who drives, who calls the ride, where you meet.</p>
     <textarea id="ride" placeholder="Meet at 5th and Market. Marcus is sober driver. Backup: two rides, Captain calls them.">${esc(plan.ride)}</textarea></div>
@@ -2230,9 +2300,61 @@ function renderKit(){
 }
 
 /* ---------- render ---------- */
+/* Header photo strip. The header is static markup, so this lives outside
+   render()'s innerHTML swap and survives every tab switch — same reason the
+   song button keeps playing. It has to be refreshed explicitly from anywhere
+   photos change: local posts, and remote Firebase updates. */
+let stripAutoTimer = null, stripPausedUntil = 0, stripSig = null;
+function renderPhotoStrip(force){
+  const el = $("photostrip"); if (!el) return;
+  if (!photos.length){ el.hidden = true; el.innerHTML = ""; stripSig = ""; return; }
+  const shown = photos.slice(0,20);
+  /* Firebase pushes a value event on every write, including ones that change
+     nothing here. Rebuilding the row would yank scroll back to the start
+     mid-swipe, so only rebuild when the visible set actually differs. */
+  const sig = shown.map(p=>p.id).join(",") + "|" + photos.length;
+  if (!force && sig === stripSig) return;
+  stripSig = sig;
+  el.hidden = false;
+  el.innerHTML = `<div class="striphead">
+      <span class="striplab">Weekend photos</span>
+      <span class="stripall">${photos.length}</span>
+    </div>
+    <div class="striprow" id="striprow">${shown.map((ph,idx)=>
+      `<div class="stripitem" data-shot="${idx}">
+         <img src="${ph.dataUrl}" alt="${esc(ph.text||"Weekend photo")}">
+         <span>${esc(ph.av||"")} ${esc(ph.name||"")}</span>
+       </div>`).join("")}</div>`;
+  const row = $("striprow");
+  /* any touch or manual scroll pauses the drift, so it never fights the user */
+  const pause = ()=>{ stripPausedUntil = Date.now() + 12000; };
+  row.addEventListener("touchstart", pause, {passive:true});
+  row.addEventListener("pointerdown", pause);
+  row.addEventListener("wheel", pause, {passive:true});
+  if (stripAutoTimer) clearInterval(stripAutoTimer);
+  if (shown.length > 1){
+    stripAutoTimer = setInterval(()=>{
+      const r = $("striprow"); if (!r) return;
+      if (Date.now() < stripPausedUntil) return;
+      if (document.hidden) return;
+      const step = 96; /* one tile + gap */
+      const atEnd = r.scrollLeft + r.clientWidth >= r.scrollWidth - 4;
+      r.scrollTo({left: atEnd ? 0 : r.scrollLeft + step, behavior:"smooth"});
+    }, 4000);
+  }
+}
+function openShot(idx){
+  const ph = photos[idx]; if (!ph) return;
+  sheet(`<div class="krow"><h3>${esc(ph.av||"")} ${esc(ph.name||"")}</h3>
+      <button class="kclose" id="shotclose" aria-label="Close photo">✕</button></div>
+    <img src="${ph.dataUrl}" alt="${esc(ph.text||"")}" style="width:100%;border-radius:10px;margin-top:8px">
+    ${ph.text?`<p class="note" style="margin-top:10px">${esc(ph.text)}</p>`:""}`);
+  $("shotclose").onclick = closeSheet;
+}
+
 function render(){
   plan.kit = plan.kit.map(x=>typeof x==="string"?{text:x,done:false}:x);
-  renderNow(); renderTabs();
+  renderNow(); renderTabs(); renderPhotoStrip();
   $("main").innerHTML = view==="kit" ? renderKit() : view==="song" ? renderShanty() : view==="quest" ? renderQuest() : view==="gaunt" ? renderGaunt() : renderDay(view);
   $("editbar").hidden = !editing;
   if (view==="gaunt") dRestoreMapScroll();
@@ -2241,7 +2363,7 @@ function render(){
 
 /* ---------- events ---------- */
 document.addEventListener("click", e=>{
-  const t = e.target.closest("[data-tab],[data-open],[data-pick],[data-done],[data-edit],[data-add],[data-up],[data-down],[data-copy],[data-kit],[data-cls],[data-av],[data-res],#addkit,#copyplan,#resetplan,#editoff,#roll,#j_go,#resetgame,#clearphotos,#d_applyupdate,#forceupdate");
+  const t = e.target.closest("[data-tab],[data-open],[data-pick],[data-done],[data-edit],[data-add],[data-up],[data-down],[data-copy],[data-kit],[data-cls],[data-av],[data-res],[data-shot],#addkit,#copyplan,#resetplan,#editoff,#roll,#j_go,#resetgame,#clearphotos,#addphoto,#addphotohdr,#d_applyupdate,#forceupdate");
   if (!t) return; const g = n=>t.getAttribute(n);
 
   if (t.id==="d_applyupdate"){ dApplyUpdate(); return; }
@@ -2288,6 +2410,9 @@ document.addEventListener("click", e=>{
     if (ok && game.card && (game.card.kind==="quest" || game.card.kind==="boss")){ showPhotoPrompt(); return; }
     resolveCard(ok); return;
   }
+  if (t.id==="addphotohdr"){ showStandalonePhotoPrompt(); return; }
+  if (g("data-shot")!==null){ openShot(+g("data-shot")); return; }
+  if (t.id==="addphoto"){ showStandalonePhotoPrompt(); return; }
   if (t.id==="clearphotos"){ if(confirm("Clear all the highlight photos? This can't be undone.")){ photos=[]; savePhotos(); render(); } return; }
   if (t.id==="resetgame"){ if(confirm("Start a new quest? Characters are wiped.")){ game=newGame(); saveGame(); render(); } return; }
 });
@@ -2342,6 +2467,91 @@ function addStop(dayId){ sheet(form({}));
    The header markup is static (render() only touches #main/#tabs), so this
    button and the audio element are never recreated when switching tabs —
    playback naturally keeps going undisturbed. */
+
+/* Karaoke sync is an ESTIMATE, not a real transcription — there's no way to
+   listen to the actual vocals here, so each line just gets an equal slice of
+   the track's real duration (98.4s / 32 sung lines). The shanty's steady,
+   four-beats-a-line pace (see the Song tab's tempo notes) makes even spacing
+   a reasonable guess, but it can drift a line or two by the end. */
+const LYRICS = [
+  {v:1},
+  {i:0,t:"Oh we sailed our crew to San Diego town,",k:"lead"},
+  {i:1,t:"Way, hay, Matty-o!",k:"resp"},
+  {i:2,t:"To give our boy his last go-round,",k:"lead"},
+  {i:3,t:"'Fore he's a married man-o!",k:"resp"},
+  {c:1},
+  {i:4,t:"Heave away, you Phatty crew,",k:"ch"},
+  {i:5,t:"Pour the rum and drink on through,",k:"ch"},
+  {i:6,t:"We'll walk him home by morning too,",k:"ch"},
+  {i:7,t:"Before he says \"I do-o!\"",k:"ch"},
+  {v:2},
+  {i:8,t:"We hit the cellar, stormed the pool,",k:"lead"},
+  {i:9,t:"Way, hay, Matty-o!",k:"resp"},
+  {i:10,t:"Hodad's burgers, breaking rules,",k:"lead"},
+  {i:11,t:"'Fore he's a married man-o!",k:"resp"},
+  {c:1},
+  {i:12,t:"Heave away, you Phatty crew,",k:"ch"},
+  {i:13,t:"Pour the rum and drink on through,",k:"ch"},
+  {i:14,t:"We'll walk him home by morning too,",k:"ch"},
+  {i:15,t:"Before he says \"I do-o!\"",k:"ch"},
+  {v:3},
+  {i:16,t:"We climbed the bells, we crawled the bars,",k:"lead"},
+  {i:17,t:"Way, hay, Matty-o!",k:"resp"},
+  {i:18,t:"Gaslamp lit up like the stars,",k:"lead"},
+  {i:19,t:"'Fore he's a married man-o!",k:"resp"},
+  {c:1},
+  {i:20,t:"Heave away, you Phatty crew,",k:"ch"},
+  {i:21,t:"Pour the rum and drink on through,",k:"ch"},
+  {i:22,t:"We'll walk him home by morning too,",k:"ch"},
+  {i:23,t:"Before he says \"I do-o!\"",k:"ch"},
+  {v:4},
+  {i:24,t:"So here's to Matt, and here's to love,",k:"lead"},
+  {i:25,t:"Way, hay, Matty-o!",k:"resp"},
+  {i:26,t:"The brotherhood's still up above,",k:"lead"},
+  {i:27,t:"'Fore he's a married man-o!",k:"resp"},
+  {c:2},
+  {i:28,t:"Heave away, you Phatty crew,",k:"ch"},
+  {i:29,t:"Pour the rum and drink on through,",k:"ch"},
+  {i:30,t:"We'll walk him home by morning too,",k:"ch"},
+  {i:31,t:"Before he says — \"I DO!\"",k:"ch"}
+];
+function renderKaraoke(){
+  let html = `<div class="karaoke">`;
+  LYRICS.forEach(row=>{
+    if (row.v) html += `<p class="klabel">Verse ${row.v}</p>`;
+    else if (row.c===1) html += `<p class="klabel">Chorus — everybody</p>`;
+    else if (row.c===2) html += `<p class="klabel">Final chorus — arms around shoulders</p>`;
+    else html += `<p class="kline k-${row.k}" data-i="${row.i}">${esc(row.t)}</p>`;
+  });
+  html += `</div>`;
+  return html;
+}
+function openKaraoke(){
+  const total = LYRICS.filter(r=>r.t!==undefined).length;
+  sheet(`<div class="krow"><h3>🎤 Sing along</h3><button class="kclose" id="kclose" aria-label="Close lyrics">✕</button></div>
+    ${renderKaraoke()}
+    <p class="note" style="margin-top:10px">Timing's estimated from the track length, not the actual vocals — it may drift a line by the end.</p>`);
+  $("kclose").onclick = closeSheet;
+  const audio = document.getElementById("bachelorSong");
+  let lastIdx = -1;
+  function tick(){
+    if ($("sheet").hidden) return; /* popup closed — let the loop die */
+    if (!audio.paused && !audio.ended){
+      const dur = (audio.duration && isFinite(audio.duration)) ? audio.duration : 98.4;
+      const secPerLine = dur / total;
+      const idx = Math.min(total-1, Math.max(0, Math.floor(audio.currentTime / secPerLine)));
+      if (idx !== lastIdx){
+        lastIdx = idx;
+        const prev = document.querySelector(".kline.active");
+        if (prev) prev.classList.remove("active");
+        const cur = document.querySelector(`.kline[data-i="${idx}"]`);
+        if (cur){ cur.classList.add("active"); cur.scrollIntoView({block:"center", behavior:"smooth"}); }
+      }
+    }
+    requestAnimationFrame(tick);
+  }
+  requestAnimationFrame(tick);
+}
 function initSongToggle(){
   const btn = document.getElementById("songToggle");
   const audio = document.getElementById("bachelorSong");
@@ -2356,6 +2566,7 @@ function initSongToggle(){
     btn.setAttribute("aria-label","Pause bachelor party song");
     btn.setAttribute("aria-pressed","true");
     btn.classList.add("playing");
+    openKaraoke();
   });
   audio.addEventListener("pause", ()=>{
     playIcon.style.display=""; pauseIcon.style.display="none";
