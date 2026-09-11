@@ -40,6 +40,20 @@ header{background:var(--ink-deep);border-bottom:1px solid var(--ink-line);paddin
 .mark{font-family:Anton,Haettenschweiler,Impact,sans-serif;font-weight:400;line-height:.86;
       letter-spacing:-.01em;font-size:clamp(34px,10.5vw,54px);text-transform:uppercase}
 .mark span{display:block}.mark .l2{color:var(--syrup)}.mark .l3{color:var(--sunset)}
+.songbtn{position:absolute;top:calc(env(safe-area-inset-top) + 4px);right:16px;
+  width:44px;height:44px;border-radius:50%;background:var(--ink);
+  border:1.5px solid var(--syrup);color:var(--sand);
+  display:flex;align-items:center;justify-content:center;z-index:5}
+.songbtn .ic-play{margin-left:2px}
+.songbtn:active{transform:scale(.94)}
+@media (prefers-reduced-motion:no-preference){
+  .songbtn.playing{animation:songpulse 1.8s ease-out infinite}
+}
+@keyframes songpulse{
+  0%{box-shadow:0 0 0 0 rgba(232,163,61,.45)}
+  70%{box-shadow:0 0 0 9px rgba(232,163,61,0)}
+  100%{box-shadow:0 0 0 0 rgba(232,163,61,0)}
+}
 .dates{color:var(--kelp);font-size:13.5px;margin-top:10px}
 .countdown{color:var(--sand);font-size:13.5px;margin-top:2px}
 .now{margin-top:16px;background:#132A38;border:1px solid var(--ink-line);border-left:3px solid var(--sunset);
@@ -199,6 +213,9 @@ label{display:block;color:var(--kelp);font-size:12.5px;margin-top:12px}
 
 /* ---------- shanty ---------- */
 .shanty{margin-top:10px}
+.shanty .versenum{color:var(--sunset);font-size:12px;font-weight:700;text-transform:uppercase;
+  letter-spacing:.08em;margin:22px 0 2px;padding-top:14px;border-top:1px dashed var(--ink-line)}
+.shanty .versenum:first-child{margin-top:0;padding-top:0;border-top:none}
 .shanty .lead{color:var(--sand);font-size:14.5px;margin:10px 0 2px}
 .shanty .lead b{color:var(--kelp);font-weight:700;font-size:12px;text-transform:uppercase;letter-spacing:.02em}
 .shanty .resp{color:var(--syrup);font-size:16px;font-weight:700;margin:0 0 4px 14px}
@@ -233,7 +250,12 @@ label{display:block;color:var(--kelp);font-size:12.5px;margin-top:12px}
 <body>
 
 <header>
-  <div class="wrap">
+  <div class="wrap" style="position:relative">
+    <button id="songToggle" class="songbtn" type="button" aria-label="Play bachelor party song" aria-pressed="false">
+      <svg class="ic-play" viewBox="0 0 24 24" width="17" height="17" aria-hidden="true"><path d="M8 5v14l11-7z" fill="currentColor"/></svg>
+      <svg class="ic-pause" viewBox="0 0 24 24" width="17" height="17" aria-hidden="true" style="display:none"><path d="M6 5h4v14H6zM14 5h4v14h-4z" fill="currentColor"/></svg>
+    </button>
+    <audio id="bachelorSong" preload="none" src="Before_He_Says_I_Do.mp3"></audio>
     <h1 class="mark"><span>AddyZaddy</span><span class="l2">SyrupDaddy</span><span class="l3">Phatty Weekend</span></h1>
     <p class="dates">September 11–13, 2026 · San Diego</p>
     <p class="countdown" id="countdown"></p>
@@ -2118,49 +2140,54 @@ function renderShanty(){
     <p style="color:var(--syrup);font-weight:700;font-size:15px;margin-top:6px;line-height:1.5">Oh we <u>SAILED</u> our <u>CREW</u> to San Di-<u>E</u>-go <u>TOWN</u></p>
     <p style="margin-top:10px"><b style="color:var(--sand)">Reference tempo:</b> same bouncy pace as "What Shall We Do with a Drunken Sailor" — brisk, not rushed, like pounding a table, not racing through it.</p></div>
   <div class="panel"><div class="shanty">
+      <p class="versenum">Verse 1</p>
       <p class="lead"><b>Leader</b> — Oh we sailed our crew to San Diego town,</p>
       <p class="resp">Way, hay, Matty-o!</p>
       <p class="lead"><b>Leader</b> — To give our boy his last go-round,</p>
       <p class="resp">'Fore he's a married man-o!</p>
 
-      <div class="chorus"><b>CHORUS — everybody</b><br>
+      <div class="chorus"><b>Chorus — everybody</b>
         Heave away, you Phatty crew,<br>
         Pour the rum and drink on through,<br>
         We'll walk him home by morning too,<br>
         Before he says "I do-o!"</div>
 
+      <p class="versenum">Verse 2</p>
       <p class="lead"><b>Leader</b> — We hit the cellar, stormed the pool,</p>
       <p class="resp">Way, hay, Matty-o!</p>
       <p class="lead"><b>Leader</b> — Hodad's burgers, breaking rules,</p>
       <p class="resp">'Fore he's a married man-o!</p>
 
-      <div class="chorus"><b>CHORUS — everybody</b><br>
+      <div class="chorus"><b>Chorus — everybody</b>
         Heave away, you Phatty crew,<br>
         Pour the rum and drink on through,<br>
         We'll walk him home by morning too,<br>
         Before he says "I do-o!"</div>
 
+      <p class="versenum">Verse 3</p>
       <p class="lead"><b>Leader</b> — We climbed the bells, we crawled the bars,</p>
       <p class="resp">Way, hay, Matty-o!</p>
       <p class="lead"><b>Leader</b> — Gaslamp lit up like the stars,</p>
       <p class="resp">'Fore he's a married man-o!</p>
 
-      <div class="chorus"><b>CHORUS — everybody</b><br>
+      <div class="chorus"><b>Chorus — everybody</b>
         Heave away, you Phatty crew,<br>
         Pour the rum and drink on through,<br>
         We'll walk him home by morning too,<br>
         Before he says "I do-o!"</div>
 
+      <p class="versenum">Verse 4</p>
       <p class="lead"><b>Leader</b> — So here's to Matt, and here's to love,</p>
       <p class="resp">Way, hay, Matty-o!</p>
       <p class="lead"><b>Leader</b> — The brotherhood's still up above,</p>
       <p class="resp">'Fore he's a married man-o!</p>
 
-      <div class="chorus big"><b>FINAL CHORUS — arms around shoulders</b><br>
+      <p class="versenum">Final chorus</p>
+      <div class="chorus big"><b>Arms around shoulders</b>
         Heave away, you Phatty crew,<br>
         Pour the rum and drink on through,<br>
         We'll walk him home by morning too,<br>
-        Before he says — <b>"I DO!"</b></div>
+        Before he says — <b style="display:inline;font-size:inherit;text-transform:none;letter-spacing:0">"I DO!"</b></div>
   </div></div>`;
 }
 function renderKit(){
@@ -2310,9 +2337,38 @@ function addStop(dayId){ sheet(form({}));
                   place:v.pname?{name:v.pname,q:v.pq||v.pname}:null});
     d.items.sort((a,b)=>(when(d.date,a.time)||0)-(when(d.date,b.time)||0)); toast("Stop added"); }); }
 
+/* small header Easter egg — no timeline, no autoplay, just a play/pause toggle.
+   The header markup is static (render() only touches #main/#tabs), so this
+   button and the audio element are never recreated when switching tabs —
+   playback naturally keeps going undisturbed. */
+function initSongToggle(){
+  const btn = document.getElementById("songToggle");
+  const audio = document.getElementById("bachelorSong");
+  if (!btn || !audio) return;
+  const playIcon = btn.querySelector(".ic-play"), pauseIcon = btn.querySelector(".ic-pause");
+  btn.addEventListener("click", ()=>{
+    if (audio.paused) audio.play().catch(()=>{});
+    else audio.pause();
+  });
+  audio.addEventListener("play", ()=>{
+    playIcon.style.display="none"; pauseIcon.style.display="";
+    btn.setAttribute("aria-label","Pause bachelor party song");
+    btn.setAttribute("aria-pressed","true");
+    btn.classList.add("playing");
+  });
+  audio.addEventListener("pause", ()=>{
+    playIcon.style.display=""; pauseIcon.style.display="none";
+    btn.setAttribute("aria-label","Play bachelor party song");
+    btn.setAttribute("aria-pressed","false");
+    btn.classList.remove("playing");
+  });
+  audio.addEventListener("ended", ()=>{ audio.currentTime = 0; });
+}
+
 /* ---------- start ---------- */
 (function(){
   render(); initSync(); fetchWeather(); setInterval(renderNow, 30000);
+  initSongToggle();
   dCheckForNewBuild();
   setInterval(dCheckForNewBuild, 120000);
   document.addEventListener("visibilitychange", ()=>{ if (!document.hidden) dCheckForNewBuild(); });
