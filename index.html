@@ -72,6 +72,13 @@ header{background:var(--ink-deep);border-bottom:1px solid var(--ink-line);paddin
   border:1px solid var(--ink-line);background:var(--ink)}
 .stripitem span{display:block;color:var(--kelp);font-size:10.5px;margin-top:4px;
   white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.steps{margin-top:14px}
+.step{display:flex;gap:11px;align-items:flex-start;padding:9px 0;border-top:1px solid var(--ink-line)}
+.step:first-child{border-top:none}
+.step b{flex:0 0 auto;width:23px;height:23px;border-radius:50%;background:var(--syrup);color:var(--ink-deep);
+  font-size:12.5px;display:flex;align-items:center;justify-content:center}
+.step span{flex:1;color:var(--sand);font-size:14px;line-height:1.4}
+.step span b{display:inline;width:auto;height:auto;background:none;color:var(--syrup);font-size:inherit}
 .refreshbtn.spinning svg{animation:spin .6s linear infinite}
 @keyframes spin{to{transform:rotate(360deg)}}
 @media (prefers-reduced-motion:no-preference){
@@ -291,6 +298,11 @@ label{display:block;color:var(--kelp);font-size:12.5px;margin-top:12px}
 .hitem p{font-size:11.5px;color:var(--kelp);margin:6px 0 0;line-height:1.35}
 .hitem p b{color:var(--sand)}
 
+.highlights{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:10px}
+.hitem img{width:100%;aspect-ratio:1;object-fit:cover;border-radius:8px;display:block;border:1px solid var(--ink-line)}
+.hitem p{font-size:11.5px;color:var(--kelp);margin:6px 0 0;line-height:1.35}
+.hitem p b{color:var(--sand)}
+
 .editbar{position:sticky;bottom:0;z-index:45;background:rgba(10,22,30,.95);backdrop-filter:blur(10px);
          border-top:1px solid var(--ink-line);padding:10px 16px calc(10px + env(safe-area-inset-bottom))}
 .editbar .in{max-width:640px;margin:0 auto;display:flex;gap:10px;align-items:center}
@@ -366,7 +378,7 @@ const ROOM = "phatty2026";
 /* Bumped every time I ship a change, so you can tell at a glance whether a phone
    is actually running the latest code — the home-screen app has no address bar
    and no refresh button, so this is the only reliable way to check. */
-const APP_BUILD = "sep 10, 9:15pm";
+const APP_BUILD = "sep 12, merged";
 /* Home-screen apps have no refresh button and don't know to check for updates —
    so instead of waiting for someone to remember to look, we periodically fetch
    the live file ourselves and compare build stamps. Any mismatch, on any screen,
@@ -591,6 +603,7 @@ function drawCard(kind){
   return DECK[kind][game.decks[kind].pop()];
 }
 
+
 /* ---- highlights: photos live on their own Firebase path so a growing photo
    collection doesn't get re-sent to every phone on every single dice roll ---- */
 const PHKEY = "azsd.photos";
@@ -620,6 +633,23 @@ function compressImage(file){
   });
 }
 
+/* ---- Trip photos: iCloud is the canonical library -----------------------
+   Apple gives no public web API for writing into a Shared Album, and the
+   album page can't be safely framed, so this site is the entry point and
+   Apple holds the photos.
+
+   On current iOS the old "Public Website" toggle is gone. Album sharing is
+   now Sharing Options → Who Can Access → "Anyone with the Link", and when
+   that's selected the invitation link IS the public link — one URL does
+   both jobs. Both constants therefore point at the same place: VIEW opens
+   the album, JOIN is the same link used to subscribe so you can add.
+
+   If the album is ever switched back to "People You Choose", the view link
+   stops working for anyone not already invited. */
+const ALBUM_JOIN_URL = "https://photos.icloud.com/shared/album/0afjV1gVDO3f67ven30YsQXeg";
+const ALBUM_VIEW_URL = "https://photos.icloud.com/shared/album/0afjV1gVDO3f67ven30YsQXeg";
+function albumViewLink(){ return ALBUM_VIEW_URL || ALBUM_JOIN_URL; }
+function albumViewIsPublic(){ return !!ALBUM_VIEW_URL; }
 /* Firebase — both games share one project, different paths so they never collide:
    games/{ROOM}/quest   -> the board game
    games/{ROOM}/dungeon -> the Groom's Gauntlet campaign */
@@ -811,6 +841,8 @@ function renderAwards(){
     ${awards.map(a=>`<div class="lb"><span class="nm">${esc(a.label)}<small>${esc(a.detail)}</small></span><span class="sc">${esc(a.name)}</span></div>`).join("")}
     </div>`;
 }
+/* One canonical Trip Photos surface, reused in the header, Kit and Quest so
+   there is visibly ONE photo system even though Apple owns the storage. */
 function renderHighlights(){
   const addBtn = `<button class="btn go" id="addphoto">📸 Add a photo</button>`;
   if (!photos.length) return `<div class="panel"><h3>📸 Highlights</h3>
@@ -879,6 +911,35 @@ function showPhotoPrompt(){
   $("qphoto_skip").onclick = ()=>{ closeSheet(); resolveCard(1, null); };
   $("qphoto_go").onclick = ()=>{ closeSheet(); resolveCard(1, picked); };
 }
+
+function renderTripPhotos(){
+  return `<div class="panel"><h3>📷 Trip Photos</h3>
+    <p>Photos from the weekend live in our shared iCloud album.</p>
+    <div class="acts">
+      <a class="btn go" href="${albumViewLink()}" target="_blank" rel="noopener">View Photos</a>
+      <button class="btn ghost" id="addphotos">+ Add Photos</button>
+    </div>
+    <p class="note" style="margin-top:9px">Photos you add in the Photos app show up in the album for everyone.</p>
+    ${albumViewIsPublic() ? "" : `<p class="note setupnote">Setup: the album's <b>Public Website</b> link isn't set yet, so <b>View Photos</b> opens the invite link instead. Anyone without an Apple account can't see it until that's added.</p>`}
+  </div>`;
+}
+function showAddPhotosGuide(){
+  sheet(`<div class="krow"><h3>Add photos</h3>
+      <button class="kclose" id="apclose" aria-label="Close">✕</button></div>
+    <p style="color:var(--kelp);font-size:14px;margin-top:6px">
+      Apple doesn't let a website put photos straight into a shared album, so this hands off to the Photos app — that's the real album, and it's where they stay after the trip.</p>
+    <div class="steps">
+      <div class="step"><b>1</b><span>Join the album once — tap below, then <b>Subscribe</b> when Photos opens.</span></div>
+      <div class="step"><b>2</b><span>In <b>Photos</b>, pick the shots you want.</span></div>
+      <div class="step"><b>3</b><span>Tap <b>Share</b> → <b>Add to Shared Album</b> → choose our album.</span></div>
+    </div>
+    <div class="acts" style="margin-top:14px">
+      <a class="btn go" href="${ALBUM_JOIN_URL}" target="_blank" rel="noopener">Open the album in Photos</a>
+    </div>
+    <p class="note" style="margin-top:10px">On Android you can still tap <b>View Photos</b> to see everything — adding needs an Apple device.</p>`);
+  $("apclose").onclick = closeSheet;
+}
+
 
 /* ================================================================
    THE GROOM'S GAUNTLET — a small Gloomhaven-style card combat game.
@@ -2109,9 +2170,84 @@ function stopBody(i){
 }
 
 /* ---------- quest tab ---------- */
+/* ---- Quest hosting ----------------------------------------------------
+   Deliberately a separate, q-prefixed mirror of the Gauntlet's host logic.
+   It reads and writes ONLY `game` / fbRef (games/<room>/quest) and never
+   reaches into Gauntlet state or its ref, so resetting a quest cannot
+   disturb a Gauntlet run. The two games share no state, keys or path. */
+function qHostIsOrphaned(){
+  return !!game.hostId && !(game.players||[]).some(p=>p.id===game.hostId);
+}
+function qRealHostId(){ return qHostIsOrphaned() ? null : (game.hostId || null); }
+function qIAmHost(){ const h = qRealHostId(); return !h || h === me.id; }
+function qClaimHostSafely(){
+  if (!myPlayer()){ toast("Make your character first — host is tied to it"); return; }
+  if (!syncOn || !fbRef){ toast("Can't claim host while offline — connect first"); render(); return; }
+  toast("Checking…");
+  fbRef.child("hostId").once("value")
+    .then(snap=>{
+      const serverHost = snap.val();
+      const serverHostIsReal = serverHost && (game.players||[]).some(p=>p.id===serverHost);
+      if (serverHost && serverHost!==me.id && serverHostIsReal){
+        toast((game.hostName||"Someone")+" is already host"); render(); return;
+      }
+      try{
+        game.hostId = me.id; game.hostName = (myPlayer()||{}).name || me.name || "Host";
+        saveGame(); render(); toast("You're the host");
+      }catch(inner){
+        game.hostId=null; game.hostName=null;
+        toast("Couldn't claim host — try again"); render();
+      }
+    })
+    .catch(()=>{ toast("Couldn't confirm host — check your connection"); render(); });
+}
+function qHostPanel(){
+  const host = qRealHostId(), mine = myPlayer();
+  if (!host){
+    return `<div class="panel"><h3>Host</h3>
+      <p>Someone runs the game — they start it once everyone's in, and they're the one who can reset it.</p>
+      <div class="acts"><button class="btn go" id="q_claimhost" ${mine?"":"disabled"}>
+        ${mine?"I'll host":"Make your character first"}</button></div></div>`;
+  }
+  if (host === me.id){
+    return `<div class="panel"><h3>Host</h3><p>You're hosting this quest.</p>
+      <div class="acts"><button class="btn ghost" id="q_releasehost">Release host</button></div></div>`;
+  }
+  return `<div class="panel"><h3>Host</h3><p>${esc(game.hostName||"Someone")} is hosting.</p></div>`;
+}
+function qResetPanel(){
+  if (!qIAmHost()) return `<div class="panel"><h3>Reset</h3>
+    <p>Only ${esc(game.hostName||"the host")} can start a new quest.</p></div>`;
+  return `<div class="panel"><h3>Reset</h3>
+    <p>Wipes quest characters, the host claim, and progress. Does not touch the Vault Crawl.</p>
+    <div class="acts"><button class="btn warn" id="resetgame">Start a new quest</button></div></div>`;
+}
+/* Lobby: everyone makes a character, host starts when the group's ready. */
+function qLobby(){
+  const mine = myPlayer(), host = qRealHostId();
+  let h = `<div class="hero-q"><p class="who">${game.players.length} in the party</p>
+    <h2>Waiting to start</h2>
+    <p class="who">${host ? esc(game.hostName||"The host")+" starts when everyone's in" : "Someone needs to host"}</p></div>`;
+  h += `<div class="panel"><h3>The party</h3>` +
+    (game.players.length ? game.players.map(pl=>
+      `<div class="lb"><span class="av">${pl.av}</span>
+        <span class="nm">${esc(pl.name)}${pl.id===me.id?" (you)":""}${pl.id===host?" · host":""}<small>${CLASSES[pl.cls].n}</small></span></div>`).join("")
+      : `<p>Nobody yet.</p>`) + `</div>`;
+  h += qHostPanel();
+  if (host === me.id){
+    h += `<div class="panel"><h3>Start</h3><p>Everyone in? Kick it off.</p>
+      <div class="acts"><button class="btn go" id="q_start" ${game.players.length?"":"disabled"}>
+        ${game.players.length?"Start the quest":"Need at least one character"}</button></div></div>`;
+  }
+  h += qResetPanel();
+  h += `<p class="mode">${syncOn ? "Live — everyone sees the same lobby" : "This phone only — pass it around to take turns"}</p>`;
+  return h;
+}
+
 function renderQuest(){
   const mine = myPlayer();
   if (!mine) return renderJoin();
+  if (!game.started) return qLobby();
 
   const p = activeP(), yours = p && p.id===me.id;
   let h = "";
@@ -2163,8 +2299,8 @@ function renderQuest(){
     (game.log.length ? game.log.slice(0,12).map(l=>`<div class="log">${l.t}</div>`).join("")
                      : `<p>Nothing yet. Roll to start the story.</p>`) + `</div>`;
 
-  h += `<div class="panel"><h3>Reset</h3><p>Wipes characters and starts the quest over.</p>
-        <div class="acts"><button class="btn warn" id="resetgame">Start a new quest</button></div></div>`;
+  h += qHostPanel();
+  h += qResetPanel();
 
   h += `<p class="mode">${syncOn ? "Live — everyone sees the same board" : "This phone only — pass it around to take turns"}</p>`;
   return h;
@@ -2318,9 +2454,7 @@ function renderKit(){
     <div class="acts"><a class="btn go" href="${maps(plan.hq.q)}">Open in Maps</a>
     <button class="btn ghost" data-copy="${esc(plan.hq.addr)}">Copy address</button></div></div>
 
-  <div class="panel"><h3>📷 Weekend photo album</h3>
-    <p>Full-resolution photos, backed up automatically — join once and anything anyone adds shows up in everyone's Photos app.</p>
-    <div class="acts"><a class="btn go" href="https://photos.icloud.com/shared/album/0afjV1gVDO3f67ven30YsQXeg" target="_blank" rel="noopener">Join the iCloud album</a></div></div>
+  ${renderTripPhotos()}
 
   <div class="panel"><h3>Nobody gets left behind</h3>
     <p>Write the ride-back plan before Saturday night. Who drives, who calls the ride, where you meet.</p>
@@ -2343,6 +2477,11 @@ function renderKit(){
 }
 
 /* ---------- render ---------- */
+/* Header photo strip. The header is static markup, so this lives outside
+   render()'s innerHTML swap and survives every tab switch — same reason the
+   song button keeps playing. It has to be refreshed explicitly from anywhere
+
+
 /* Header photo strip. The header is static markup, so this lives outside
    render()'s innerHTML swap and survives every tab switch — same reason the
    song button keeps playing. It has to be refreshed explicitly from anywhere
@@ -2406,7 +2545,7 @@ function render(){
 
 /* ---------- events ---------- */
 document.addEventListener("click", e=>{
-  const t = e.target.closest("[data-tab],[data-open],[data-pick],[data-done],[data-edit],[data-add],[data-up],[data-down],[data-copy],[data-kit],[data-cls],[data-av],[data-res],[data-shot],#addkit,#copyplan,#resetplan,#editoff,#roll,#j_go,#resetgame,#clearphotos,#addphoto,#addphotohdr,.photohint,#d_applyupdate,#forceupdate");
+  const t = e.target.closest("[data-tab],[data-open],[data-pick],[data-done],[data-edit],[data-add],[data-up],[data-down],[data-copy],[data-kit],[data-cls],[data-av],[data-res],[data-shot],#addkit,#copyplan,#resetplan,#editoff,#roll,#j_go,#resetgame,#clearphotos,#addphoto,#addphotos,#addphotohdr,.photohint,#q_claimhost,#q_releasehost,#q_start,#d_applyupdate,#forceupdate");
   if (!t) return; const g = n=>t.getAttribute(n);
 
   if (t.id==="d_applyupdate"){ dApplyUpdate(); return; }
@@ -2456,8 +2595,27 @@ document.addEventListener("click", e=>{
   if (t.id==="addphotohdr" || t.classList.contains("photohint")){ showStandalonePhotoPrompt(); return; }
   if (g("data-shot")!==null){ openShot(+g("data-shot")); return; }
   if (t.id==="addphoto"){ showStandalonePhotoPrompt(); return; }
+  if (t.id==="addphotos"){ showAddPhotosGuide(); return; }
   if (t.id==="clearphotos"){ if(confirm("Clear all the highlight photos? This can't be undone.")){ photos=[]; savePhotos(); render(); } return; }
-  if (t.id==="resetgame"){ if(confirm("Start a new quest? Characters are wiped.")){ game=newGame(); saveGame(); render(); } return; }
+  if (t.id==="q_claimhost"){ qClaimHostSafely(); return; }
+  if (t.id==="q_releasehost"){
+    if (qRealHostId()!==me.id){ toast("You're not the host"); return; }
+    game.hostId=null; game.hostName=null; saveGame(); render(); toast("Host released");
+    return;
+  }
+  if (t.id==="q_start"){
+    if (!qIAmHost()){ toast("Only the host can start"); return; }
+    if (!game.players.length){ toast("Nobody's made a character yet"); return; }
+    game.started = true; saveGame(); render(); toast("Quest started");
+    return;
+  }
+  if (t.id==="resetgame"){
+    if (!qIAmHost()){ toast("Only the host can reset the quest"); return; }
+    if(confirm("Start a new quest? Quest characters are wiped. This does NOT affect the Vault Crawl.")){
+      game=newGame(); saveGame(); render();
+    }
+    return;
+  }
 });
 document.addEventListener("input", e=>{
   if (e.target.id==="ride"){ plan.ride=e.target.value; savePlan(); }
@@ -2511,6 +2669,11 @@ function addStop(dayId){ sheet(form({}));
    button and the audio element are never recreated when switching tabs —
    playback naturally keeps going undisturbed. */
 
+/* Karaoke sync is an ESTIMATE, not a real transcription — there's no way to
+   listen to the actual vocals here, so each line just gets an equal slice of
+   the track's real duration (98.4s / 32 sung lines). The shanty's steady,
+   four-beats-a-line pace (see the Song tab's tempo notes) makes even spacing
+   a reasonable guess, but it can drift a line or two by the end. */
 /* ---- Karaoke timing ----
    These marks are measured off the actual recording, not guessed from the
    track length. The shanty runs on a steady 2.288s line (four beats at
@@ -2629,6 +2792,7 @@ function openKaraoke(){
   }
   requestAnimationFrame(tick);
 }
+
 function initSongToggle(){
   const btn = document.getElementById("songToggle");
   const audio = document.getElementById("bachelorSong");
