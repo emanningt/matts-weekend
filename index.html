@@ -293,6 +293,9 @@ label{display:block;color:var(--kelp);font-size:12.5px;margin-top:12px}
 .kbreak.active{color:var(--syrup);background:var(--ink);font-style:italic;transform:none}
 
 /* ---------- highlights ---------- */
+.savegrid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:10px}
+.saveitem img{width:100%;aspect-ratio:1;object-fit:cover;border-radius:8px;display:block;border:1px solid var(--ink-line)}
+.saveitem span{display:block;font-size:11.5px;color:var(--kelp);margin-top:5px;line-height:1.35}
 .highlights{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:10px}
 .hitem img{width:100%;aspect-ratio:1;object-fit:cover;border-radius:8px;display:block;border:1px solid var(--ink-line)}
 .hitem p{font-size:11.5px;color:var(--kelp);margin:6px 0 0;line-height:1.35}
@@ -378,7 +381,7 @@ const ROOM = "phatty2026";
 /* Bumped every time I ship a change, so you can tell at a glance whether a phone
    is actually running the latest code — the home-screen app has no address bar
    and no refresh button, so this is the only reliable way to check. */
-const APP_BUILD = "sep 12, merged";
+const APP_BUILD = "sep 12, join fix";
 /* Home-screen apps have no refresh button and don't know to check for updates —
    so instead of waiting for someone to remember to look, we periodically fetch
    the live file ourselves and compare build stamps. Any mismatch, on any screen,
@@ -562,7 +565,7 @@ const DECK = {
   ]
 };
 
-let me = loadMe(), game = null, syncOn = false, fbRef = null, dRef = null, pRef = null;
+let me = loadMe(), game = null, syncOn = false, fbRef = null, dRef = null, pRef = null, pFullRef = null;
 function loadMe(){ try{ const r=store.getItem(MKEY); if(r) return JSON.parse(r); }catch(e){} 
   const m={id:uid()}; store.setItem(MKEY,JSON.stringify(m)); return m; }
 function saveMe(){ store.setItem(MKEY,JSON.stringify(me)); }
@@ -614,18 +617,30 @@ function savePhotos(){
   fbWrite(pRef, photos, "Photos");
   renderPhotoStrip();
 }
-function compressImage(file){
+/* Two sizes per photo. The small one is what syncs to every phone in the
+   shared array (unchanged — 720px/0.55, ~49KB), because that node is re-sent
+   in full on every post and must stay light. The big one is written once to
+   its own path that nothing listens to, and is only pulled down by the Save
+   tab when someone actually wants the files. */
+const THUMB = {dim:720,  q:0.55};
+const FULL  = {dim:1600, q:0.85};
+function saveFullCopy(id, dataUrl){
+  if (!syncOn || !pFullRef || !dataUrl) return;
+  try{ pFullRef.child(id).set(dataUrl).catch(()=>{}); }catch(e){}
+}
+function compressImage(file, opt){
+  const {dim, q} = opt || THUMB;
   return new Promise((resolve,reject)=>{
     const reader = new FileReader();
     reader.onload = e=>{
       const img = new Image();
       img.onload = ()=>{
-        const maxDim = 720; let w=img.width, h=img.height;
+        const maxDim = dim; let w=img.width, h=img.height;
         if (w>h && w>maxDim){ h=Math.round(h*maxDim/w); w=maxDim; }
         else if (h>=w && h>maxDim){ w=Math.round(w*maxDim/h); h=maxDim; }
         const cv = document.createElement("canvas"); cv.width=w; cv.height=h;
         cv.getContext("2d").drawImage(img,0,0,w,h);
-        resolve(cv.toDataURL("image/jpeg",0.55));
+        resolve(cv.toDataURL("image/jpeg",q));
       };
       img.onerror = reject; img.src = e.target.result;
     };
@@ -684,6 +699,9 @@ function initSync(){
         fbRef = firebase.database().ref("games/"+ROOM+"/quest");
         dRef  = firebase.database().ref("games/"+ROOM+"/dungeon");
         pRef  = firebase.database().ref("games/"+ROOM+"/photos");
+        /* no .on() here on purpose — full-size copies are fetched only when
+           the Save tab asks for them, so they never ride along with sync */
+        pFullRef = firebase.database().ref("games/"+ROOM+"/photos_full");
 
         /* Firebase tells us directly whether we're actually connected — far more honest
            than assuming we're live just because the scripts downloaded. This flips
@@ -789,7 +807,7 @@ function rollTurn(){
   } else { game.card=null; endTurn(); }
   saveGame(); render();
 }
-function resolveCard(ok, photo){
+function resolveCard(ok, photo, photoFull){
   const c = game.card; if(!c) return;
   const p = game.players.find(x=>x.id===c.by); if(!p) return;
   if (c.kind==="tavern"){
@@ -806,9 +824,11 @@ function resolveCard(ok, photo){
     else if (ok){ p.xp += 2; logIt(`<b>${esc(p.name)}</b> did it but rolled ${total} vs ${c.dc}. +2 XP for effort`); }
     else { p.gold = Math.max(0,p.gold-2); logIt(`<b>${esc(p.name)}</b> backed out. -2 gold`); }
     if (ok && photo){
-      photos.unshift({id:uid(), name:p.name, av:p.av, text:c.t, dataUrl:photo, at:Date.now()});
+      const pid = uid();
+      photos.unshift({id:pid, name:p.name, av:p.av, text:c.t, dataUrl:photo, full:1, at:Date.now()});
       if (photos.length>150) photos = photos.slice(0,150);
       savePhotos();
+      saveFullCopy(pid, photoFull);
       logIt(`<b>${esc(p.name)}</b> added a photo to the highlights`);
     }
   }
@@ -865,12 +885,13 @@ function showStandalonePhotoPrompt(){
     <label for="hphoto_cap">Caption <small style="color:var(--kelp);font-weight:400">(optional)</small></label>
     <input id="hphoto_cap" placeholder="What's happening here?">
     <div class="row" style="margin-top:14px"><button class="btn ghost" id="hphoto_cancel">Cancel</button><button class="btn go" id="hphoto_go" disabled>Post it</button></div>`);
-  let picked = null;
+  let picked = null, pickedFull = null;
   $("hphoto").addEventListener("change", async e=>{
     const f = e.target.files[0]; if(!f) return;
     toast("Compressing photo…");
     try{
-      picked = await compressImage(f);
+      picked = await compressImage(f, THUMB);
+      pickedFull = await compressImage(f, FULL);
       $("hphoto_prev").innerHTML = `<img src="${picked}" style="width:100%;border-radius:8px;margin-top:10px">`;
       $("hphoto_lab").classList.add("has");
       $("hphoto_lab").innerHTML = "🔄 Pick a different one";
@@ -882,9 +903,11 @@ function showStandalonePhotoPrompt(){
     const name = ($("hphoto_name").value||"").trim() || "Someone";
     const cap = ($("hphoto_cap").value||"").trim();
     me.name = name; saveMe();
-    photos.unshift({id:uid(), name, av:"📸", text:cap, dataUrl:picked, at:Date.now()});
+    const pid = uid();
+    photos.unshift({id:pid, name, av:"📸", text:cap, dataUrl:picked, full:1, at:Date.now()});
     if (photos.length>150) photos = photos.slice(0,150);
     savePhotos();
+    saveFullCopy(pid, pickedFull);
     logIt(`<b>${esc(name)}</b> added a photo to the highlights`);
     closeSheet(); render();
   };
@@ -896,12 +919,13 @@ function showPhotoPrompt(){
     <label class="filebtn" id="qphoto_lab" for="qphoto">📷 Take a photo or pick one<small>from your camera roll</small></label>
     <div id="qphoto_prev"></div>
     <div class="row"><button class="btn ghost" id="qphoto_skip">Skip</button><button class="btn go" id="qphoto_go" disabled>Attach & confirm</button></div>`);
-  let picked = null;
+  let picked = null, pickedFull = null;
   $("qphoto").addEventListener("change", async e=>{
     const f = e.target.files[0]; if(!f) return;
     toast("Compressing photo…");
     try{
-      picked = await compressImage(f);
+      picked = await compressImage(f, THUMB);
+      pickedFull = await compressImage(f, FULL);
       $("qphoto_prev").innerHTML = `<img src="${picked}" style="width:100%;border-radius:8px;margin-top:10px">`;
       $("qphoto_lab").classList.add("has");
       $("qphoto_lab").innerHTML = "🔄 Pick a different one";
@@ -909,7 +933,7 @@ function showPhotoPrompt(){
     }catch(err){ toast("Couldn't read that photo"); }
   });
   $("qphoto_skip").onclick = ()=>{ closeSheet(); resolveCard(1, null); };
-  $("qphoto_go").onclick = ()=>{ closeSheet(); resolveCard(1, picked); };
+  $("qphoto_go").onclick = ()=>{ closeSheet(); resolveCard(1, picked, pickedFull); };
 }
 
 function renderTripPhotos(){
@@ -1626,7 +1650,16 @@ function dCodeToId(code){
 function dRenderJoin(){
   const counts = dClassCounts(), entries = Object.entries(DCLASSES);
   const firstOpen = entries.findIndex(([k])=>counts[k]<CLASS_CAP);
-  return dHostPanel() + `<div class="panel"><h3>Build your character</h3>
+  const allFull = firstOpen === -1;
+  return dHostPanel()
+    + (allFull ? `<div class="panel" style="border-color:var(--syrup)">
+        <h3>Party's full</h3>
+        <p>All ${Object.keys(DCLASSES).length*CLASS_CAP} slots are taken (${CLASS_CAP} per class).
+        If one of these is <b style="color:var(--sand)">your</b> character — you're on a new phone, or you cleared this one —
+        use <b style="color:var(--sand)">Restore my character</b> below with your recovery code.</p>
+        <p class="note" style="margin-top:8px">If you genuinely need another character, the host can free a slot by resetting, or tell me and I'll raise the per-class cap.</p>
+      </div>` : "")
+    + `<div class="panel"><h3>Build your character</h3>
     <p>This carries across all three days — same character, same gold and XP, from Friday's cellar to Sunday's vault.</p>
     <label for="d_name">Your name</label><input id="d_name" value="${esc(me.name||"")}" placeholder="Captain">
     <label for="d_code">Pick a recovery code <small style="color:var(--kelp);font-weight:400">— write it down. Enter it on any other phone or iPad to pick up this exact character.</small></label>
@@ -1636,7 +1669,7 @@ function dRenderJoin(){
       const full = counts[k]>=CLASS_CAP;
       return `<button data-dcls="${k}" class="${idx===firstOpen?"on":""} ${full?"full":""}" ${full?"disabled":""}>${c.n}<small>${full?`Full — ${CLASS_CAP}/${CLASS_CAP} taken`:c.d}</small></button>`;
     }).join("")}</div>
-    <div class="acts" style="margin-top:16px"><button class="btn go" id="d_go">Enter the Gauntlet</button></div></div>
+    <div class="acts" style="margin-top:16px"><button class="btn go" id="d_go" ${allFull?"disabled":""}>${allFull?"All classes full":"Enter the Gauntlet"}</button></div></div>
   <div class="panel"><h3>Switching devices?</h3>
     <p>If you already made a character on another phone, enter its recovery code here to pick it right back up.</p>
     <label for="d_restore">Recovery code</label><input id="d_restore" placeholder="your code" autocapitalize="off" autocorrect="off">
@@ -1869,7 +1902,12 @@ document.addEventListener("click", e=>{
       toast("That code's already used — pick another, or use Restore below if it's yours");
       return;
     }
-    const cls=$("d_class").querySelector(".on").getAttribute("data-dcls");
+    /* With 4 classes capped at 2 there are exactly 8 slots, so a full party
+       leaves nothing pre-selected — this used to read .getAttribute off null
+       and throw, killing the click before the recovery code was ever used. */
+    const clsBtn=$("d_class").querySelector(".on");
+    if (!clsBtn){ toast("Every class is full — use Restore below, or someone frees a slot"); return; }
+    const cls=clsBtn.getAttribute("data-dcls");
     if ((dClassCounts()[cls]||0) >= CLASS_CAP){ toast(DCLASSES[cls].n+" just filled up — pick another class"); render(); return; }
     me.id = newId; me.name = name; me.code = rawCode; saveMe();
     dungeon.players.push({id:me.id,name,cls,gold:0,xp:0,hand:[],discard:[],lost:[],hp:0,maxHp:0,zone:0,shield:0,taunt:false,ko:false,selected:null,deck:[]});
@@ -2115,7 +2153,8 @@ function renderTabs(){
     `<button class="tab ${view===d.id?"on":""}" data-tab="${d.id}"><i>${d.date.slice(-2)}</i><b>${fullDay(d).slice(0,3)}</b></button>`).join("")
     + `<button class="tab ${view==="quest"?"on":""}" data-tab="quest"><i>🎲</i><b>Quest</b></button>`
     + `<button class="tab ${view==="kit"?"on":""}" data-tab="kit"><i>🎒</i><b>Kit</b></button>`
-    + `<button class="tab ${view==="song"?"on":""}" data-tab="song"><i>⚓</i><b>Song</b></button>`;
+    + `<button class="tab ${view==="song"?"on":""}" data-tab="song"><i>⚓</i><b>Song</b></button>`
+    + `<button class="tab ${view==="photos"?"on":""}" data-tab="photos"><i>📥</i><b>Save</b></button>`;
 }
 
 /* ---------- itinerary ---------- */
@@ -2441,6 +2480,91 @@ function renderShanty(){
         Before he says — <b style="display:inline;font-size:inherit;text-transform:none;letter-spacing:0">"I DO!"</b></div>
   </div></div>`;
 }
+/* The Save tab is the only thing that ever pulls full-size copies down, and
+   only when asked. Results are cached so re-rendering doesn't refetch. */
+let fullCache = {}, fullFetching = false;
+function fetchFullPhotos(){
+  if (fullFetching) return;
+  if (!syncOn || !pFullRef){ toast("Need a connection to get the full-size ones"); return; }
+  const want = photos.filter(p=>p.full && !fullCache[p.id]);
+  if (!want.length){ toast("Already have them"); render(); return; }
+  fullFetching = true;
+  toast(`Fetching ${want.length} full-size…`);
+  let done = 0, got = 0;
+  want.forEach(p=>{
+    pFullRef.child(p.id).once("value")
+      .then(snap=>{ const v = snap.val(); if (v){ fullCache[p.id] = v; got++; } })
+      .catch(()=>{})
+      .then(()=>{
+        if (++done === want.length){
+          fullFetching = false;
+          toast(got ? `Got ${got} at full size` : "Couldn't fetch those");
+          render();
+        }
+      });
+  });
+}
+
+/* ---------- save / export tab ----------
+   Lets the weekend's in-app photos be pulled off the phone once the trip's
+   over, so they can go into the iCloud album (or anywhere else) for keeps.
+   These are the compressed copies the app syncs — 720px, not the originals,
+   which only ever lived on the phone that took them. */
+function renderSavePhotos(){
+  if (!photos.length) return `<div class="panel"><h3>📥 Save the photos</h3>
+    <p>Nothing posted yet. Anything added with the ➕ button shows up here, ready to pull off the phone.</p></div>`;
+
+  const stamp = ph => {
+    const d = new Date(ph.at||Date.now());
+    const p = n => String(n).padStart(2,"0");
+    return `${d.getFullYear()}-${p(d.getMonth()+1)}-${p(d.getDate())}_${p(d.getHours())}${p(d.getMinutes())}`;
+  };
+  const fname = (ph,i) => `phatty-${String(i+1).padStart(2,"0")}_${stamp(ph)}_${(ph.name||"someone").toLowerCase().replace(/[^a-z0-9]+/g,"-").replace(/^-|-$/g,"")}.jpg`;
+
+  const haveFull = photos.filter(p=>fullCache[p.id]).length;
+  const canFull  = photos.filter(p=>p.full).length;
+  const noFull   = photos.length - canFull;
+
+  return `<div class="panel"><h3>📥 Save the photos</h3>
+    <p>${photos.length} photo${photos.length===1?"":"s"} from the weekend.</p>
+    ${canFull ? `<div class="acts"><button class="btn ${haveFull<canFull?"solid":"ghost"}" id="getfull">
+        ${haveFull>=canFull ? `✓ Full size ready (${haveFull})` : `Step 1 — get full size (${canFull})`}</button></div>` : ""}
+    <div class="acts"><button class="btn go" id="dlall">${canFull?"Step 2 — save all":"Save all"} ${photos.length}</button></div>
+    <p class="note" style="margin-top:9px"><b style="color:var(--sand)">Do this on a computer</b> if you can — they land in Downloads in one go. On iPhone, saving them one at a time below is more reliable: tap a photo, long-press, <b>Save to Photos</b>.</p>
+    ${canFull && haveFull<canFull ? `<p class="note" style="margin-top:8px;border-left:2px solid var(--syrup);padding-left:9px">Tap <b>Step 1</b> first — the big versions aren't on this phone yet, and without it you'll save the small ones.</p>` : ""}
+    ${noFull ? `<p class="note" style="margin-top:8px">${noFull} of these were posted before full-size copies were added, so those only exist small. Their originals are still on whoever's phone took them.</p>` : ""}
+  </div>
+
+  <div class="panel"><h3>One at a time</h3>
+    <div class="savegrid">${photos.map((ph,i)=>
+      `<div class="saveitem">
+         <a href="${fullCache[ph.id]||ph.dataUrl}" download="${esc(fname(ph,i))}" target="_blank" rel="noopener">
+           <img src="${ph.dataUrl}" alt="${esc(ph.text||"Weekend photo")}">
+         </a>
+         <span>${fullCache[ph.id]?"🟢 full":ph.full?"· small for now":"· small only"} ${esc(ph.name||"")}</span>
+       </div>`).join("")}</div>
+  </div>
+
+  <div class="panel"><h3>Then into the album</h3>
+    <p>Once they're saved to your phone or computer, add them to the shared album and everyone keeps them for good.</p>
+    <div class="acts"><a class="btn solid" href="${albumViewLink()}" target="_blank" rel="noopener">Open the shared album</a></div>
+  </div>`;
+}
+/* Sequential clicks rather than one bundled file — no extra library to load,
+   and nothing to go wrong if the phone's offline when it's tapped. Browsers
+   throttle rapid downloads, hence the gap between each. */
+function downloadAllPhotos(){
+  const links = [...document.querySelectorAll(".saveitem a[download]")];
+  if (!links.length) return;
+  toast(`Saving ${links.length}…`);
+  links.forEach((a,i)=>setTimeout(()=>{
+    const c = document.createElement("a");
+    c.href = a.href; c.download = a.getAttribute("download");
+    document.body.appendChild(c); c.click(); c.remove();
+    if (i===links.length-1) setTimeout(()=>toast("Done — check your downloads"), 400);
+  }, i*350));
+}
+
 function renderKit(){
   const decided=[];
   plan.days.forEach(d=>d.items.forEach(i=>{ if(i.options&&i.options.length)
@@ -2537,7 +2661,7 @@ function openShot(idx){
 function render(){
   plan.kit = plan.kit.map(x=>typeof x==="string"?{text:x,done:false}:x);
   renderNow(); renderTabs(); renderPhotoStrip();
-  $("main").innerHTML = view==="kit" ? renderKit() : view==="song" ? renderShanty() : view==="quest" ? renderQuest() : view==="gaunt" ? renderGaunt() : renderDay(view);
+  $("main").innerHTML = view==="photos" ? renderSavePhotos() : view==="kit" ? renderKit() : view==="song" ? renderShanty() : view==="quest" ? renderQuest() : view==="gaunt" ? renderGaunt() : renderDay(view);
   $("editbar").hidden = !editing;
   if (view==="gaunt") dRestoreMapScroll();
   dScheduleAutoResolve();
@@ -2545,7 +2669,7 @@ function render(){
 
 /* ---------- events ---------- */
 document.addEventListener("click", e=>{
-  const t = e.target.closest("[data-tab],[data-open],[data-pick],[data-done],[data-edit],[data-add],[data-up],[data-down],[data-copy],[data-kit],[data-cls],[data-av],[data-res],[data-shot],#addkit,#copyplan,#resetplan,#editoff,#roll,#j_go,#resetgame,#clearphotos,#addphoto,#addphotos,#addphotohdr,.photohint,#q_claimhost,#q_releasehost,#q_start,#d_applyupdate,#forceupdate");
+  const t = e.target.closest("[data-tab],[data-open],[data-pick],[data-done],[data-edit],[data-add],[data-up],[data-down],[data-copy],[data-kit],[data-cls],[data-av],[data-res],[data-shot],#addkit,#copyplan,#resetplan,#editoff,#roll,#j_go,#resetgame,#dlall,#getfull,#clearphotos,#addphoto,#addphotos,#addphotohdr,.photohint,#q_claimhost,#q_releasehost,#q_start,#d_applyupdate,#forceupdate");
   if (!t) return; const g = n=>t.getAttribute(n);
 
   if (t.id==="d_applyupdate"){ dApplyUpdate(); return; }
@@ -2581,7 +2705,9 @@ document.addEventListener("click", e=>{
   if (t.id==="j_go"){
     const name = ($("j_name").value||"").trim();
     if (!name){ toast("Name first"); return; }
-    const cls = $("j_class").querySelector(".on").getAttribute("data-cls");
+    const clsBtn = $("j_class").querySelector(".on");
+    if (!clsBtn){ toast("Every class is full — someone needs to free a slot"); return; }
+    const cls = clsBtn.getAttribute("data-cls");
     if ((qClassCounts()[cls]||0) >= CLASS_CAP){ toast(CLASSES[cls].n+" just filled up — pick another class"); render(); return; }
     const av  = $("j_av").querySelector(".on").getAttribute("data-av");
     joinGame(name, cls, av); toast("You're in"); return;
@@ -2594,6 +2720,8 @@ document.addEventListener("click", e=>{
   }
   if (t.id==="addphotohdr" || t.classList.contains("photohint")){ showStandalonePhotoPrompt(); return; }
   if (g("data-shot")!==null){ openShot(+g("data-shot")); return; }
+  if (t.id==="getfull"){ fetchFullPhotos(); return; }
+  if (t.id==="dlall"){ downloadAllPhotos(); return; }
   if (t.id==="addphoto"){ showStandalonePhotoPrompt(); return; }
   if (t.id==="addphotos"){ showAddPhotosGuide(); return; }
   if (t.id==="clearphotos"){ if(confirm("Clear all the highlight photos? This can't be undone.")){ photos=[]; savePhotos(); render(); } return; }
